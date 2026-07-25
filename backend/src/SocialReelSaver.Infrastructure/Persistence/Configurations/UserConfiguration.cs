@@ -1,0 +1,57 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using SocialReelSaver.Domain.Entities;
+
+namespace SocialReelSaver.Infrastructure.Persistence.Configurations;
+
+public sealed class UserConfiguration : IEntityTypeConfiguration<User>
+{
+    public void Configure(EntityTypeBuilder<User> builder)
+    {
+        builder.ToTable("users");
+
+        builder.HasKey(e => e.Id);
+
+        builder.Property(e => e.Id)
+            .HasColumnName("id")
+            .HasColumnType("uuid")
+            .ValueGeneratedOnAdd();
+
+        builder.Property(e => e.Email)
+            .HasColumnName("email")
+            .HasMaxLength(256)
+            .IsRequired();
+
+        builder.HasIndex(e => e.Email)
+            .IsUnique()
+            .HasDatabaseName("ix_users_email");
+
+        builder.Property(e => e.PasswordHash)
+            .HasColumnName("password_hash")
+            .HasMaxLength(512)
+            .IsRequired();
+
+        builder.Property(e => e.RefreshTokenHash)
+            .HasColumnName("refresh_token_hash")
+            .HasMaxLength(128);
+
+        builder.Property(e => e.RefreshTokenExpiresAt)
+            .HasColumnName("refresh_token_expires_at")
+            .HasColumnType("timestamp with time zone");
+
+        builder.Property(e => e.IsActive)
+            .HasColumnName("is_active")
+            .IsRequired()
+            .HasDefaultValue(true);
+
+        builder.Property(e => e.CreatedAt)
+            .HasColumnName("created_at")
+            .HasColumnType("timestamp with time zone")
+            .IsRequired();
+
+        builder.Property(e => e.UpdatedAt)
+            .HasColumnName("updated_at")
+            .HasColumnType("timestamp with time zone")
+            .IsRequired();
+    }
+}

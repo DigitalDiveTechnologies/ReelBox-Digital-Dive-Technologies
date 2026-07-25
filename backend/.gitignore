@@ -1,0 +1,9 @@
+##ignore C# binaries
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.DotSettings.user
+appsettings.*.local.json
+secrets.json

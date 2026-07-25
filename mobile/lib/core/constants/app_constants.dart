@@ -2,5 +2,6 @@
 class AppConstants {
   const AppConstants._();
 
-  static const String appName = 'Social Reel Saver';
+  /// Confirmed product name (project manager).
+  static const String appName = 'Social';
 }

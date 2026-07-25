@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SocialReelSaver.Shared</RootNamespace>
+    <AssemblyName>SocialReelSaver.Shared</AssemblyName>
+  </PropertyGroup>
+
+</Project>

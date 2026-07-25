@@ -1,0 +1,23 @@
+# SocialReelSaver.Api
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+
+COPY Directory.Build.props ./
+COPY SocialReelSaver.sln ./
+COPY src/SocialReelSaver.Shared/SocialReelSaver.Shared.csproj src/SocialReelSaver.Shared/
+COPY src/SocialReelSaver.Domain/SocialReelSaver.Domain.csproj src/SocialReelSaver.Domain/
+COPY src/SocialReelSaver.Application/SocialReelSaver.Application.csproj src/SocialReelSaver.Application/
+COPY src/SocialReelSaver.Infrastructure/SocialReelSaver.Infrastructure.csproj src/SocialReelSaver.Infrastructure/
+COPY src/SocialReelSaver.Api/SocialReelSaver.Api.csproj src/SocialReelSaver.Api/
+
+RUN dotnet restore src/SocialReelSaver.Api/SocialReelSaver.Api.csproj
+
+COPY src/ ./src/
+RUN dotnet publish src/SocialReelSaver.Api/SocialReelSaver.Api.csproj -c Release -o /app/publish /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+WORKDIR /app
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "SocialReelSaver.Api.dll"]

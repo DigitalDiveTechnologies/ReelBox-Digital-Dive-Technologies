@@ -24,12 +24,12 @@ class ManualUrlSaveCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Save a reel',
+              'Paste a URL',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
             Text(
-              'Paste an Instagram or Facebook URL when share is unavailable.',
+              'Fallback when Share → Social is unavailable. Paste an Instagram or Facebook reel URL.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: scheme.onSurface.withValues(alpha: 0.62),
                   ),
