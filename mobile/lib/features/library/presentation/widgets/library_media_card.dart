@@ -1,5 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/network/media_url_resolver.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -44,8 +46,21 @@ class LibraryMediaCard extends StatelessWidget {
 
   Color get _statusBadgeColor => AppColors.statusColor(item.status);
 
+  String? get _resolvedThumbnailUrl {
+    final raw = item.thumbnailUrl?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return resolveSignedMediaUrl(raw).toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final thumbUrl = _resolvedThumbnailUrl;
+    final isCompleted = item.status == MediaStatus.completed;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -61,35 +76,31 @@ class LibraryMediaCard extends StatelessWidget {
           ),
           child: Stack(
             children: [
-              // Real thumbnail when signed URL is available (SRS FR-010).
-              if (item.hasThumbnailUrl)
+              if (thumbUrl != null)
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: AppRadius.circularCard,
-                    child: Image.network(
-                      item.thumbnailUrl!,
+                    child: CachedNetworkImage(
+                      // Stable cache key so signed-URL query churn does not
+                      // rebuild the decoded image on list polls.
+                      cacheKey: 'thumb-${item.id}',
+                      imageUrl: thumbUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
+                      memCacheWidth: 480,
+                      memCacheHeight: 680,
+                      fadeInDuration: isCompleted
+                          ? Duration.zero
+                          : const Duration(milliseconds: 200),
+                      fadeOutDuration: Duration.zero,
+                      placeholder: (context, url) => const SizedBox.shrink(),
+                      errorWidget: (context, url, error) =>
                           const SizedBox.shrink(),
                     ),
                   ),
                 )
-              else if (item.status == MediaStatus.completed &&
-                  item.hasThumbnailKey)
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: AppRadius.circularCard,
-                      color: AppColors.splashBgDeep.withValues(alpha: 0.35),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.image_outlined,
-                        color: AppColors.splashTextPrimary,
-                        size: 28,
-                      ),
-                    ),
-                  ),
+              else if (isCompleted && item.hasThumbnailKey)
+                const Positioned.fill(
+                  child: _CompletedThumbFallback(),
                 ),
               Positioned(
                 top: AppSpacing.sm,
@@ -169,6 +180,27 @@ class LibraryMediaCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompletedThumbFallback extends StatelessWidget {
+  const _CompletedThumbFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.circularCard,
+        color: AppColors.splashBgDeep.withValues(alpha: 0.35),
+      ),
+      child: const Center(
+        child: Icon(
+          Icons.image_outlined,
+          color: AppColors.splashTextPrimary,
+          size: 28,
         ),
       ),
     );

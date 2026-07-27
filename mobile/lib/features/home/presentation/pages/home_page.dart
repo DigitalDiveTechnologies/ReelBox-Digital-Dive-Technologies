@@ -1,5 +1,6 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -12,11 +13,11 @@ import '../../../../shared/models/media_item_preview.dart';
 import '../../../../shared/models/media_platform.dart';
 import '../../../../shared/models/media_status.dart';
 import '../../../media/presentation/providers/media_providers.dart';
-import '../../../share/data/share_url_extractor.dart';
 import '../widgets/home_header_bar.dart';
 import '../widgets/home_paste_link_card.dart';
 import '../widgets/home_platform_card.dart';
 import '../widgets/home_recent_reel_card.dart';
+import '../widgets/paste_link_sheet.dart';
 
 /// Home screen — download dashboard (SRS §6.2 / §7).
 ///
@@ -32,26 +33,10 @@ class _HomePageState extends ConsumerState<HomePage> {
   var _isSubmitting = false;
 
   Future<void> _onPasteLink() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text?.trim();
-    if (!mounted) return;
-
-    if (text == null || text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Clipboard is empty.')),
-      );
-      return;
-    }
-
-    final url = ShareUrlExtractor.extract(text);
-    if (url == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No Instagram or Facebook URL found.')),
-      );
-      return;
-    }
-
-    await _submitUrl(url, source: 'clipboard');
+    if (_isSubmitting) return;
+    final url = await showPasteLinkSheet(context);
+    if (!mounted || url == null || url.isEmpty) return;
+    await _submitUrl(url, source: 'manual_paste');
   }
 
   Future<void> _submitUrl(String url, {required String source}) async {
@@ -59,6 +44,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     setState(() => _isSubmitting = true);
 
     try {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Download started.')),
+      );
       final created = await ref.read(mediaRepositoryProvider).createMedia(
             url: url,
             source: source,
@@ -66,7 +55,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       ref.invalidate(mediaListProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saving… status: ${created.status.name}')),
+        const SnackBar(content: Text('Added to your library.')),
       );
       context.push(RoutePaths.mediaDetailPath(created.id));
     } on AppException catch (error) {
@@ -86,10 +75,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
-  void _onNotificationPlaceholder() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Notifications will be available later.')),
-    );
+  void _onNotificationTap() {
+    context.push(RoutePaths.notifications);
   }
 
   void _openMedia(String id) {
@@ -174,7 +161,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       AppSpacing.xxl,
                     ),
                     children: [
-                      HomeHeaderBar(onNotificationTap: _onNotificationPlaceholder),
+                      HomeHeaderBar(onNotificationTap: _onNotificationTap),
                       const SizedBox(height: AppSpacing.section),
                       const Text(
                         'Your saved reels',
@@ -198,7 +185,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                       const SizedBox(height: AppSpacing.xl),
                       HomePasteLinkCard(
-                        onTap: _isSubmitting ? () {} : _onPasteLink,
+                        onTap: _isSubmitting ? () {} : () {
+                          unawaited(_onPasteLink());
+                        },
                       ),
                       const SizedBox(height: AppSpacing.md),
                       mediaAsync.when(

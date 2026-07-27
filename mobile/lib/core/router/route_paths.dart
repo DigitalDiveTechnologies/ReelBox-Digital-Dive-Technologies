@@ -10,6 +10,7 @@ abstract final class RoutePaths {
   static const String mediaPlayer = '/media/:id/play';
   static const String settings = '/settings';
   static const String share = '/share';
+  static const String notifications = '/notifications';
 
   static String mediaDetailPath(String id) => '/media/$id';
   static String mediaPlayerPath(String id) => '/media/$id/play';

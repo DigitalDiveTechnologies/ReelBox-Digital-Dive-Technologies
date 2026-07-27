@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
 import 'app/bootstrap.dart';
+import 'core/router/app_router_provider.dart';
 import 'features/share/data/datasources/android_share_intent_registrar.dart';
 
 Future<void> main() async {
@@ -18,11 +19,14 @@ Future<void> main() async {
     debugPrint('FLUTTER_ERROR: ${details.exceptionAsString()}');
   };
 
-  await bootstrap();
+  final boot = await bootstrap();
 
   runApp(
-    const ProviderScope(
-      child: SocialReelSaverApp(),
+    ProviderScope(
+      overrides: [
+        initialRouteProvider.overrideWithValue(boot.initialLocation),
+      ],
+      child: const SocialReelSaverApp(),
     ),
   );
 }

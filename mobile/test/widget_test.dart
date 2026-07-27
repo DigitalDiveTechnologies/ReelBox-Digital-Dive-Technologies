@@ -60,7 +60,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   SharedPreferences.setMockInitialValues({});
 
-  testWidgets('App boots to Splash then routes to Login when unsigned', (tester) async {
+  testWidgets('App boots to Splash and stays until Get Started', (tester) async {
     await tester.pumpWidget(
       const ProviderScope(
         child: SocialReelSaverApp(),
@@ -70,7 +70,12 @@ void main() {
     await tester.pump();
     expect(find.byType(SplashPage), findsOneWidget);
 
-    await tester.pumpAndSettle(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.byType(SplashPage), findsOneWidget);
+    expect(find.byType(LoginPage), findsNothing);
+
+    await tester.tap(find.text('Get started'));
+    await tester.pumpAndSettle();
     expect(find.byType(LoginPage), findsOneWidget);
   });
 

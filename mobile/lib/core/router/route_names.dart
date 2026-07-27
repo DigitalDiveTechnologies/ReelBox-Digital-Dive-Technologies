@@ -9,4 +9,5 @@ abstract final class RouteNames {
   static const String mediaPlayer = 'mediaPlayer';
   static const String settings = 'settings';
   static const String share = 'share';
+  static const String notifications = 'notifications';
 }

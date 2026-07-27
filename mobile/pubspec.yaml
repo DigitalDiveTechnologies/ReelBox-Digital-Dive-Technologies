@@ -17,6 +17,15 @@ dependencies:
   shared_preferences: ^2.5.5
   video_player: ^2.13.0
   path: ^1.9.1
+  cached_network_image: ^3.4.1
+
+# Pin path_provider platform impls to versions without jni / objective_c native
+# asset hooks. Newer transitive versions (via flutter_cache_manager) break
+# Windows builds when the user path contains spaces, and :jni needs extra
+# Kotlin Gradle wiring under AGP 9 + android.builtInKotlin=false.
+dependency_overrides:
+  path_provider_android: 2.2.22
+  path_provider_foundation: 2.4.3
 
 dev_dependencies:
   flutter_test:

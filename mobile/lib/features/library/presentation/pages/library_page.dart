@@ -192,6 +192,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
                               itemBuilder: (context, index) {
                                 final item = items[index];
                                 return LibraryMediaCard(
+                                  key: ValueKey<String>('library-card-${item.id}'),
                                   item: item,
                                   onTap: () => context.push(
                                     RoutePaths.mediaDetailPath(item.id),

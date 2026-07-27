@@ -8,6 +8,7 @@ import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/library/presentation/pages/library_page.dart';
 import '../../features/media_detail/presentation/pages/media_detail_page.dart';
 import '../../features/media_detail/presentation/pages/media_player_page.dart';
+import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
 import '../../features/share/presentation/pages/share_page.dart';
 import '../../shared/widgets/main_shell_scaffold.dart';
@@ -16,9 +17,8 @@ import 'route_paths.dart';
 
 /// Application router.
 ///
-/// Splash is the entry point so auth can gate navigation later.
-///
-/// TODO: Add redirect/refreshListenable once backend auth session APIs exist.
+/// [initialLocation] is [RoutePaths.home] when a session exists at cold start,
+/// otherwise [RoutePaths.splash] (Get Started → Login).
 GoRouter createAppRouter({String initialLocation = RoutePaths.splash}) {
   return GoRouter(
     initialLocation: initialLocation,
@@ -123,9 +123,15 @@ GoRouter createAppRouter({String initialLocation = RoutePaths.splash}) {
         path: RoutePaths.share,
         name: RouteNames.share,
         builder: (BuildContext context, GoRouterState state) {
-          // Deep-link / Android Share Intent entry: /share?url=
           final url = state.uri.queryParameters['url'];
           return SharePage(sharedUrl: url);
+        },
+      ),
+      GoRoute(
+        path: RoutePaths.notifications,
+        name: RouteNames.notifications,
+        builder: (BuildContext context, GoRouterState state) {
+          return const NotificationsPage();
         },
       ),
     ],

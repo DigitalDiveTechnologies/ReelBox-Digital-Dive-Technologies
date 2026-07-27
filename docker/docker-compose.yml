@@ -78,9 +78,9 @@ services:
       ObjectStorage__LocalRootPath: storage-dev
       Providers__Resolver: YtDlp
       Providers__YtDlpExecutablePath: yt-dlp
-      Providers__TimeoutSeconds: "180"
-      Providers__MaximumExecutionSeconds: "180"
-      Providers__YtDlpTimeoutSeconds: "150"
+      Providers__TimeoutSeconds: "360"
+      Providers__MaximumExecutionSeconds: "360"
+      Providers__YtDlpTimeoutSeconds: "330"
       Providers__AccessToken: ${Providers__AccessToken:-}
     volumes:
       - srs_storage:/app/storage-dev

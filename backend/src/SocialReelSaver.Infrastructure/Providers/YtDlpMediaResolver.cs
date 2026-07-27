@@ -60,6 +60,19 @@ public sealed class YtDlpMediaResolver
 
         try
         {
+            // Facebook share/reel extraction is slower and often fails when we run
+            // probe+download (two webpage fetches) under the provider budget.
+            // Instagram keeps the existing probe-then-download path unchanged.
+            if (platform == MediaPlatform.Facebook)
+            {
+                return await ResolveFacebookAsync(
+                    executable,
+                    originalUrl,
+                    outputPath,
+                    mediaId,
+                    cancellationToken);
+            }
+
             // Metadata first (title / availability) without downloading.
             var probe = await RunYtDlpAsync(
                 executable,
@@ -160,6 +173,145 @@ public sealed class YtDlpMediaResolver
         }
     }
 
+    /// <summary>
+    /// Facebook-only resolve: one yt-dlp download preferring progressive mp4
+    /// (<c>sd</c>/<c>hd</c>) so we avoid a second webpage fetch and a long AV1 merge.
+    /// </summary>
+    private async Task<ProviderResult> ResolveFacebookAsync(
+        string executable,
+        string originalUrl,
+        string outputPath,
+        Guid mediaId,
+        CancellationToken cancellationToken)
+    {
+        // Stay under provider MaximumExecutionSeconds with margin.
+        var fbTimeout = Math.Clamp(
+            Math.Max(_options.YtDlpTimeoutSeconds, _options.MaximumExecutionSeconds - 15),
+            60,
+            Math.Max(60, _options.MaximumExecutionSeconds - 10));
+
+        // yt-dlp replaces %(ext)s; avoids missing files when container/ext differs.
+        var outputTemplate = Path.Combine(
+            Path.GetDirectoryName(outputPath)!,
+            Path.GetFileNameWithoutExtension(outputPath) + ".%(ext)s");
+
+        _logger.LogInformation(
+            "Facebook yt-dlp single-pass download for media {MediaId} timeout={Timeout}s",
+            mediaId,
+            fbTimeout);
+
+        var download = await RunYtDlpAsync(
+            executable,
+            [
+                "--no-playlist",
+                "--no-warnings",
+                // Prefer progressive Facebook streams; sd first so typical reels
+                // finish within the provider execution budget on slow CDNs.
+                "-f",
+                "sd/hd/b[ext=mp4]/best[ext=mp4]/best",
+                "--merge-output-format",
+                "mp4",
+                "--socket-timeout",
+                "90",
+                "--retries",
+                "3",
+                "--fragment-retries",
+                "3",
+                "-o",
+                outputTemplate,
+                originalUrl,
+            ],
+            fbTimeout,
+            cancellationToken);
+
+        if (!download.Success)
+        {
+            await CleanupFacebookOutputsAsync(outputPath, cancellationToken);
+            _logger.LogWarning(
+                "Facebook yt-dlp failed for media {MediaId}: {Stderr}",
+                mediaId,
+                Truncate(download.StdErr, 500));
+            return MapYtDlpFailure(download.StdErr, download.ExitCode);
+        }
+
+        var produced = FindProducedFacebookFile(outputPath);
+        if (produced is null)
+        {
+            await CleanupFacebookOutputsAsync(outputPath, cancellationToken);
+            _logger.LogWarning(
+                "Facebook yt-dlp produced no file for media {MediaId}. stderr={Stderr} stdout={Stdout}",
+                mediaId,
+                Truncate(download.StdErr, 400),
+                Truncate(download.StdOut, 200));
+            return ProviderResult.Failed(
+                ProviderErrorCode.InvalidProviderResponse,
+                "yt-dlp finished without producing a media file.");
+        }
+
+        if (!string.Equals(produced, outputPath, StringComparison.Ordinal))
+        {
+            // Normalize to the expected .mp4 path for the rest of the pipeline.
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+
+            File.Move(produced, outputPath, overwrite: true);
+        }
+
+        if (!File.Exists(outputPath) || new FileInfo(outputPath).Length <= 0)
+        {
+            await CleanupFacebookOutputsAsync(outputPath, cancellationToken);
+            return ProviderResult.Failed(
+                ProviderErrorCode.InvalidProviderResponse,
+                "yt-dlp finished without producing a media file.");
+        }
+
+        return ProviderResult.Ok(
+            originalUrl,
+            title: null,
+            mimeType: "video/mp4",
+            extension: ".mp4",
+            localFilePath: outputPath);
+    }
+
+    private static string? FindProducedFacebookFile(string expectedMp4Path)
+    {
+        if (File.Exists(expectedMp4Path) && new FileInfo(expectedMp4Path).Length > 0)
+        {
+            return expectedMp4Path;
+        }
+
+        var dir = Path.GetDirectoryName(expectedMp4Path);
+        var stem = Path.GetFileNameWithoutExtension(expectedMp4Path);
+        if (string.IsNullOrWhiteSpace(dir) || string.IsNullOrWhiteSpace(stem))
+        {
+            return null;
+        }
+
+        return Directory.EnumerateFiles(dir, stem + ".*")
+            .Where(path => !path.EndsWith(".part", StringComparison.OrdinalIgnoreCase))
+            .Where(path => new FileInfo(path).Length > 0)
+            .OrderByDescending(path => new FileInfo(path).Length)
+            .FirstOrDefault();
+    }
+
+    private async Task CleanupFacebookOutputsAsync(string expectedMp4Path, CancellationToken cancellationToken)
+    {
+        await _tempFiles.CleanupAsync(expectedMp4Path, cancellationToken);
+        var dir = Path.GetDirectoryName(expectedMp4Path);
+        var stem = Path.GetFileNameWithoutExtension(expectedMp4Path);
+        if (string.IsNullOrWhiteSpace(dir) || string.IsNullOrWhiteSpace(stem))
+        {
+            return;
+        }
+
+        foreach (var path in Directory.EnumerateFiles(dir, stem + ".*"))
+        {
+            await _tempFiles.CleanupAsync(path, CancellationToken.None);
+        }
+    }
+
     private async Task<YtDlpRunResult> RunYtDlpAsync(
         string executable,
         IReadOnlyList<string> args,
@@ -254,7 +406,13 @@ public sealed class YtDlpMediaResolver
             return Regex.IsMatch(path, @"^/(reel|p|tv)/[^/]+$", RegexOptions.IgnoreCase);
         }
 
-        if (Regex.IsMatch(path, @"^/(reel|reels|videos|watch|share/v)/", RegexOptions.IgnoreCase))
+        if (Regex.IsMatch(path, @"^/(reel|reels|videos|watch|share/v|share/r)/", RegexOptions.IgnoreCase))
+        {
+            return true;
+        }
+
+        // Generic /share/{id}/ short links used by the Facebook share sheet.
+        if (Regex.IsMatch(path, @"^/share/[^/]+$", RegexOptions.IgnoreCase))
         {
             return true;
         }

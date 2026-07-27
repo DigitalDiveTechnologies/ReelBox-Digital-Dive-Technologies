@@ -22,8 +22,6 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  var _autoDownloadWifi = true;
-  var _downloadNotifications = false;
   var _loggingOut = false;
 
   Future<void> _onLogout() async {
@@ -176,38 +174,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 : () => context.go(RoutePaths.login),
                           );
                         },
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.section),
-                    const _SectionLabel('PREFERENCES'),
-                    const SizedBox(height: AppSpacing.sm),
-                    _SettingsCard(
-                      child: Column(
-                        children: [
-                          _PreferenceToggleRow(
-                            icon: Icons.wb_sunny_outlined,
-                            label: 'Auto-download on Wi-Fi',
-                            value: _autoDownloadWifi,
-                            onChanged: (value) {
-                              setState(() => _autoDownloadWifi = value);
-                            },
-                          ),
-                          Divider(
-                            height: 1,
-                            thickness: 1,
-                            color: AppColors.splashChipBorder.withValues(
-                              alpha: 0.55,
-                            ),
-                          ),
-                          _PreferenceToggleRow(
-                            icon: Icons.notifications_none_rounded,
-                            label: 'Download notifications',
-                            value: _downloadNotifications,
-                            onChanged: (value) {
-                              setState(() => _downloadNotifications = value);
-                            },
-                          ),
-                        ],
                       ),
                     ),
                     const SizedBox(height: AppSpacing.section),
@@ -365,92 +331,6 @@ class _AccountRow extends StatelessWidget {
                 color: AppColors.splashTextMuted.withValues(alpha: 0.85),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PreferenceToggleRow extends StatelessWidget {
-  const _PreferenceToggleRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      child: Row(
-        children: [
-          _LeadingIconBox(icon: icon),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: AppColors.splashTextPrimary,
-              ),
-            ),
-          ),
-          _GradientSwitch(value: value, onChanged: onChanged),
-        ],
-      ),
-    );
-  }
-}
-
-class _GradientSwitch extends StatelessWidget {
-  const _GradientSwitch({
-    required this.value,
-    required this.onChanged,
-  });
-
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 52,
-        height: 32,
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          borderRadius: AppRadius.circularPill,
-          gradient: value ? AppGradients.brandCta : null,
-          color: value
-              ? null
-              : AppColors.splashChipBorder.withValues(alpha: 0.85),
-        ),
-        child: AnimatedAlign(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            width: 26,
-            height: 26,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: value
-                  ? AppColors.splashTextPrimary
-                  : AppColors.splashTextMuted,
-            ),
           ),
         ),
       ),

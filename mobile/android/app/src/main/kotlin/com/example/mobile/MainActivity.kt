@@ -23,6 +23,7 @@ class MainActivity : FlutterActivity() {
         private const val METHOD_GET_INITIAL = "getInitialSharedText"
         private const val METHOD_ON_SHARED = "onSharedText"
         private const val METHOD_SHARE_FILE = "shareFile"
+        private const val METHOD_GET_CACHE_DIR = "getCacheDir"
 
         /** Survives activity recreation until Flutter consumes the payload. */
         @Volatile
@@ -79,6 +80,9 @@ class MainActivity : FlutterActivity() {
                         } catch (ex: Exception) {
                             result.error("share_failed", ex.message, null)
                         }
+                    }
+                    METHOD_GET_CACHE_DIR -> {
+                        result.success(cacheDir.absolutePath)
                     }
                     else -> result.notImplemented()
                 }

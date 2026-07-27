@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/network/media_url_resolver.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_gradients.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -62,24 +64,41 @@ class _MediaPlayerPageState extends ConsumerState<MediaPlayerPage> {
 
       final playback =
           await ref.read(mediaRepositoryProvider).getPlayback(item.id);
-      final url = playback.playbackUrl?.trim();
-      if (url == null || url.isEmpty) {
+      final rawUrl = playback.playbackUrl?.trim();
+      if (rawUrl == null || rawUrl.isEmpty) {
         throw const AppException(message: 'Playback URL unavailable.');
       }
 
-      await _attachController(Uri.parse(url));
+      final uri = resolveSignedMediaUrl(rawUrl);
+
+      try {
+        final probe = await http.head(uri);
+        if (probe.statusCode == 401 ||
+            probe.statusCode == 403 ||
+            probe.statusCode == 404) {
+          throw AppException(
+            message: 'Video unavailable (${probe.statusCode}).',
+          );
+        }
+      } catch (error) {
+        if (error is AppException) rethrow;
+        // Some servers omit HEAD; ExoPlayer will still try GET.
+      }
+
+      await _attachController(uri);
     } on AppException catch (error) {
       if (!mounted) return;
       setState(() {
         _loadingUrl = false;
         _error = error.message;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _loadingUrl = false;
         _error = 'Could not start playback.';
       });
+      debugPrint('PLAYBACK_ERROR: $error');
     }
   }
 
@@ -88,7 +107,10 @@ class _MediaPlayerPageState extends ConsumerState<MediaPlayerPage> {
     previous?.removeListener(_onControllerUpdate);
     await previous?.dispose();
 
-    final controller = VideoPlayerController.networkUrl(uri);
+    final controller = VideoPlayerController.networkUrl(
+      uri,
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+    );
     _controller = controller;
     controller.addListener(_onControllerUpdate);
 
@@ -103,12 +125,13 @@ class _MediaPlayerPageState extends ConsumerState<MediaPlayerPage> {
       await controller.play();
       if (!mounted) return;
       setState(() => _initializingPlayer = false);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _initializingPlayer = false;
         _error = 'Unable to play this video.';
       });
+      debugPrint('VIDEO_PLAYER_INIT: $error');
     }
   }
 

@@ -68,12 +68,19 @@ class _SharePageState extends ConsumerState<SharePage> {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
     try {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Download started.')),
+      );
       final created = await ref.read(mediaRepositoryProvider).createMedia(
             url: url,
             source: 'share_sheet',
           );
       ref.invalidate(mediaListProvider);
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Added to your library.')),
+      );
       context.go(RoutePaths.mediaDetailPath(created.id));
     } on AppException catch (error) {
       if (!mounted) return;
