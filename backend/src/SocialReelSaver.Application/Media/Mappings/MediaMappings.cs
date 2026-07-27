@@ -5,7 +5,10 @@ namespace SocialReelSaver.Application.Media.Mappings;
 
 public static class MediaMappings
 {
-    public static MediaResponse ToResponse(this MediaItem item, string? source = null) =>
+    public static MediaResponse ToResponse(
+        this MediaItem item,
+        string? source = null,
+        string? thumbnailUrl = null) =>
         new(
             item.Id,
             item.Platform.ToString().ToLowerInvariant(),
@@ -26,15 +29,22 @@ public static class MediaMappings
             item.ErrorCode,
             item.ErrorMessage,
             item.RetryCount,
-            source);
+            source,
+            thumbnailUrl);
 
     public static MediaListResponse ToListResponse(
         this IReadOnlyList<MediaItem> items,
         int page,
         int pageSize,
-        int totalCount) =>
+        int totalCount,
+        IReadOnlyDictionary<Guid, string?>? thumbnailUrls = null) =>
         new(
-            items.Select(i => i.ToResponse()).ToList(),
+            items.Select(i =>
+            {
+                string? thumbUrl = null;
+                thumbnailUrls?.TryGetValue(i.Id, out thumbUrl);
+                return i.ToResponse(thumbnailUrl: thumbUrl);
+            }).ToList(),
             page,
             pageSize,
             totalCount,

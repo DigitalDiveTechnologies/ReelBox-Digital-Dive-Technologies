@@ -172,17 +172,20 @@ public sealed class PlaybackUrlService : IPlaybackUrlService
     private readonly IPlaybackAuthorization _authorization;
     private readonly ISignedUrlProvider _signedUrls;
     private readonly IObjectStorageService _storage;
+    private readonly IMediaThumbnailUrlService _thumbnailUrls;
     private readonly ObjectStorageOptions _options;
 
     public PlaybackUrlService(
         IPlaybackAuthorization authorization,
         ISignedUrlProvider signedUrls,
         IObjectStorageService storage,
+        IMediaThumbnailUrlService thumbnailUrls,
         IOptions<ObjectStorageOptions> options)
     {
         _authorization = authorization;
         _signedUrls = signedUrls;
         _storage = storage;
+        _thumbnailUrls = thumbnailUrls;
         _options = options.Value;
     }
 
@@ -222,6 +225,8 @@ public sealed class PlaybackUrlService : IPlaybackUrlService
                 signed.ErrorCode ?? "STORAGE_FAILURE");
         }
 
+        var thumbnailUrl = await _thumbnailUrls.CreateThumbnailUrlAsync(item, cancellationToken);
+
         return new PlaybackMetadata
         {
             MediaId = item.Id,
@@ -231,6 +236,7 @@ public sealed class PlaybackUrlService : IPlaybackUrlService
             ThumbnailStorageKey = item.ThumbnailStorageKey,
             MimeType = item.MimeType,
             PlaybackUrl = signed.Url,
+            ThumbnailUrl = thumbnailUrl,
             Delivery = signed.Delivery,
             ExpiresAt = signed.ExpiresAt,
         };

@@ -152,13 +152,15 @@ public sealed class ObjectStorageAndPlaybackTests
                 UpdatedAt = DateTimeOffset.UtcNow,
             };
 
+            var signedUrls = new LocalSignedUrlProvider(storageOptions, Options.Create(new JwtOptions
+            {
+                SigningKey = "JWT_FALLBACK_UNUSED_IN_THIS_TEST_KEY!!!!",
+            }));
             var service = new PlaybackUrlService(
                 new PlaybackAuthorization(),
-                new LocalSignedUrlProvider(storageOptions, Options.Create(new JwtOptions
-                {
-                    SigningKey = "JWT_FALLBACK_UNUSED_IN_THIS_TEST_KEY!!!!",
-                })),
+                signedUrls,
                 storage,
+                new MediaThumbnailUrlService(signedUrls, storageOptions),
                 storageOptions);
 
             var metadata = await service.CreateAsync(item, item.UserId);

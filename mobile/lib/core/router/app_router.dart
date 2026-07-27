@@ -7,6 +7,7 @@ import '../../features/auth/presentation/pages/splash_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/library/presentation/pages/library_page.dart';
 import '../../features/media_detail/presentation/pages/media_detail_page.dart';
+import '../../features/media_detail/presentation/pages/media_player_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
 import '../../features/share/presentation/pages/share_page.dart';
 import '../../shared/widgets/main_shell_scaffold.dart';
@@ -107,13 +108,22 @@ GoRouter createAppRouter({String initialLocation = RoutePaths.splash}) {
           final id = state.pathParameters['id'] ?? '';
           return MediaDetailPage(mediaId: id);
         },
+        routes: <RouteBase>[
+          GoRoute(
+            path: 'play',
+            name: RouteNames.mediaPlayer,
+            builder: (BuildContext context, GoRouterState state) {
+              final id = state.pathParameters['id'] ?? '';
+              return MediaPlayerPage(mediaId: id);
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: RoutePaths.share,
         name: RouteNames.share,
         builder: (BuildContext context, GoRouterState state) {
-          // Deep-link / future platform-share entry: /share?url=
-          // TODO: Also navigate here from Android Share Intent / iOS Share Extension.
+          // Deep-link / Android Share Intent entry: /share?url=
           final url = state.uri.queryParameters['url'];
           return SharePage(sharedUrl: url);
         },

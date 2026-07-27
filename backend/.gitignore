@@ -7,3 +7,5 @@ obj/
 *.DotSettings.user
 appsettings.*.local.json
 secrets.json
+.env
+.env.local

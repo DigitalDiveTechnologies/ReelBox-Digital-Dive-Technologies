@@ -95,6 +95,10 @@ public sealed class MediaItemConfiguration : IEntityTypeConfiguration<MediaItem>
             .HasColumnType("timestamp with time zone")
             .IsRequired();
 
+        builder.Property(e => e.NextRetryAt)
+            .HasColumnName("next_retry_at")
+            .HasColumnType("timestamp with time zone");
+
         builder.Property(e => e.ErrorCode)
             .HasColumnName("error_code")
             .HasMaxLength(64);
@@ -108,6 +112,12 @@ public sealed class MediaItemConfiguration : IEntityTypeConfiguration<MediaItem>
             .HasColumnType("integer")
             .IsRequired()
             .HasDefaultValue(0);
+
+        builder.HasOne(e => e.User)
+            .WithMany(u => u.MediaItems)
+            .HasForeignKey(e => e.UserId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .IsRequired();
 
         builder.ToTable(t =>
         {
@@ -130,5 +140,9 @@ public sealed class MediaItemConfiguration : IEntityTypeConfiguration<MediaItem>
             .IsUnique()
             .HasFilter("normalized_url IS NOT NULL")
             .HasDatabaseName("ix_media_items_user_id_normalized_url");
+
+        // SRS §12.2 — worker DB polling support (status / next_retry_at)
+        builder.HasIndex(e => new { e.Status, e.NextRetryAt })
+            .HasDatabaseName("ix_media_items_status_next_retry_at");
     }
 }

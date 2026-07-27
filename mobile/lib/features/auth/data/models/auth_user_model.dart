@@ -1,6 +1,4 @@
-/// Data-layer DTO for an authenticated user.
-///
-/// TODO: Map JSON from backend auth API responses when contracts are available.
+/// Data-layer DTO for an authenticated user (backend `UserResponse`).
 class AuthUserModel {
   const AuthUserModel({
     required this.id,
@@ -10,7 +8,6 @@ class AuthUserModel {
   final String id;
   final String? email;
 
-  /// TODO: Align field names with the backend auth API contract.
   factory AuthUserModel.fromJson(Map<String, dynamic> json) {
     return AuthUserModel(
       id: json['id']?.toString() ?? '',
@@ -18,7 +15,6 @@ class AuthUserModel {
     );
   }
 
-  /// TODO: Align field names with the backend auth API contract.
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'id': id,

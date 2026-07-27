@@ -88,6 +88,12 @@ public sealed record ProviderResult
 
     public string? ResolvedSourceUrl { get; init; }
 
+    /// <summary>
+    /// Optional local file already downloaded by the provider (e.g. yt-dlp).
+    /// When set, the pipeline skips the HTTP downloader step.
+    /// </summary>
+    public string? LocalFilePath { get; init; }
+
     public string? Title { get; init; }
 
     public string? SuggestedMimeType { get; init; }
@@ -112,10 +118,12 @@ public sealed record ProviderResult
         string? title = null,
         string? mimeType = null,
         string? extension = null,
-        long? durationMs = null) => new()
+        long? durationMs = null,
+        string? localFilePath = null) => new()
     {
         Success = true,
         ResolvedSourceUrl = resolvedSourceUrl,
+        LocalFilePath = localFilePath,
         Title = title,
         SuggestedMimeType = mimeType,
         SuggestedExtension = extension,

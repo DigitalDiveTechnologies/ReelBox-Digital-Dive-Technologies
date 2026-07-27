@@ -96,7 +96,14 @@ public sealed class MediaDownloadPipeline
                 cancellationToken);
 
             var resolution = providerOutcome.Result;
-            if (!resolution.Success || string.IsNullOrWhiteSpace(resolution.ResolvedSourceUrl))
+            if (!string.IsNullOrWhiteSpace(resolution.Title))
+            {
+                item.Title = resolution.Title;
+            }
+
+            if (!resolution.Success ||
+                (string.IsNullOrWhiteSpace(resolution.ResolvedSourceUrl) &&
+                 string.IsNullOrWhiteSpace(resolution.LocalFilePath)))
             {
                 await FailOrRetryAsync(
                     item,
@@ -107,44 +114,49 @@ public sealed class MediaDownloadPipeline
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(resolution.Title))
+            // Download pipeline — skip HTTP fetch when provider already wrote a local file (yt-dlp).
+            string? downloadContentType = resolution.SuggestedMimeType;
+            if (!string.IsNullOrWhiteSpace(resolution.LocalFilePath) &&
+                File.Exists(resolution.LocalFilePath))
             {
-                item.Title = resolution.Title;
+                mediaTempPath = resolution.LocalFilePath;
             }
-
-            // Download pipeline
-            var download = await _downloader.DownloadAsync(
-                new DownloadContext
-                {
-                    MediaId = item.Id,
-                    JobId = job.JobId,
-                    SourceUrl = resolution.ResolvedSourceUrl!,
-                    SuggestedFileName = string.IsNullOrWhiteSpace(resolution.SuggestedExtension)
-                        ? null
-                        : $"media{resolution.SuggestedExtension}",
-                    SuggestedMimeType = resolution.SuggestedMimeType,
-                    Attempt = job.Attempt,
-                },
-                cancellationToken);
-
-            if (!download.Success || string.IsNullOrWhiteSpace(download.LocalFilePath))
+            else
             {
-                await FailOrRetryAsync(
-                    item,
-                    job,
-                    download.ErrorCode ?? "UNKNOWN",
-                    download.ErrorMessage ?? "Download failed.",
+                var download = await _downloader.DownloadAsync(
+                    new DownloadContext
+                    {
+                        MediaId = item.Id,
+                        JobId = job.JobId,
+                        SourceUrl = resolution.ResolvedSourceUrl!,
+                        SuggestedFileName = string.IsNullOrWhiteSpace(resolution.SuggestedExtension)
+                            ? null
+                            : $"media{resolution.SuggestedExtension}",
+                        SuggestedMimeType = resolution.SuggestedMimeType,
+                        Attempt = job.Attempt,
+                    },
                     cancellationToken);
-                return;
-            }
 
-            mediaTempPath = download.LocalFilePath;
+                if (!download.Success || string.IsNullOrWhiteSpace(download.LocalFilePath))
+                {
+                    await FailOrRetryAsync(
+                        item,
+                        job,
+                        download.ErrorCode ?? "UNKNOWN",
+                        download.ErrorMessage ?? "Download failed.",
+                        cancellationToken);
+                    return;
+                }
+
+                mediaTempPath = download.LocalFilePath;
+                downloadContentType = download.ContentType ?? resolution.SuggestedMimeType;
+            }
 
             // Validation
             await _status.MarkValidatingAsync(item, cancellationToken);
             var validation = await _validator.ValidateAsync(
                 mediaTempPath,
-                download.ContentType ?? resolution.SuggestedMimeType,
+                downloadContentType ?? resolution.SuggestedMimeType,
                 resolution.SuggestedDurationMs,
                 cancellationToken);
 
@@ -312,7 +324,8 @@ public sealed class MediaDownloadPipeline
 
         item.RetryCount += 1;
         var delay = _retryPolicy.GetBackoffDelay(item.RetryCount);
-        await _status.MarkQueuedAsync(item, cancellationToken);
+        var nextRetryAt = DateTimeOffset.UtcNow.Add(delay);
+        await _status.MarkQueuedAsync(item, nextRetryAt, cancellationToken);
 
         var retryJob = new MediaDownloadJob
         {
@@ -323,14 +336,15 @@ public sealed class MediaDownloadPipeline
             OriginalUrl = item.OriginalUrl,
             Attempt = item.RetryCount,
             CreatedAt = DateTimeOffset.UtcNow,
-            NotBefore = DateTimeOffset.UtcNow.Add(delay),
+            NotBefore = nextRetryAt,
         };
 
         await _publisher.PublishDownloadJobAsync(retryJob, cancellationToken);
         _logger.LogInformation(
-            "Scheduled retry {Attempt} for media {MediaId} in {Delay}",
+            "Scheduled retry {Attempt} for media {MediaId} at {NextRetryAt} (delay {Delay})",
             item.RetryCount,
             item.Id,
+            nextRetryAt,
             delay);
     }
 

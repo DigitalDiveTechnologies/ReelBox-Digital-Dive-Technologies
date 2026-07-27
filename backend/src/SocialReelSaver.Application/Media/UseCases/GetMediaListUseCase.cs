@@ -1,4 +1,5 @@
 using SocialReelSaver.Application.Abstractions.Persistence;
+using SocialReelSaver.Application.Abstractions.Playback;
 using SocialReelSaver.Application.Media.DTOs;
 using SocialReelSaver.Application.Media.Mappings;
 using SocialReelSaver.Domain.Enums;
@@ -8,10 +9,14 @@ namespace SocialReelSaver.Application.Media.UseCases;
 public sealed class GetMediaListUseCase
 {
     private readonly IMediaRepository _media;
+    private readonly IMediaThumbnailUrlService _thumbnailUrls;
 
-    public GetMediaListUseCase(IMediaRepository media)
+    public GetMediaListUseCase(
+        IMediaRepository media,
+        IMediaThumbnailUrlService thumbnailUrls)
     {
         _media = media;
+        _thumbnailUrls = thumbnailUrls;
     }
 
     public async Task<MediaListResponse> HandleAsync(
@@ -33,6 +38,12 @@ public sealed class GetMediaListUseCase
             platform,
             cancellationToken);
 
-        return items.ToListResponse(page, pageSize, total);
+        var thumbs = new Dictionary<Guid, string?>();
+        foreach (var item in items)
+        {
+            thumbs[item.Id] = await _thumbnailUrls.CreateThumbnailUrlAsync(item, cancellationToken);
+        }
+
+        return items.ToListResponse(page, pageSize, total, thumbs);
     }
 }

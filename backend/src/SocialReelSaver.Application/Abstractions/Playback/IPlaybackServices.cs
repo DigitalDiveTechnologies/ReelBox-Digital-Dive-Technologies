@@ -18,6 +18,8 @@ public sealed record PlaybackMetadata
 
     public string? PlaybackUrl { get; init; }
 
+    public string? ThumbnailUrl { get; init; }
+
     public string Delivery { get; init; } = "signed_url";
 
     public DateTimeOffset? ExpiresAt { get; init; }

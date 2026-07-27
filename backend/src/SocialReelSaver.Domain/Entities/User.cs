@@ -20,4 +20,6 @@ public sealed class User
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    public ICollection<MediaItem> MediaItems { get; set; } = new List<MediaItem>();
 }

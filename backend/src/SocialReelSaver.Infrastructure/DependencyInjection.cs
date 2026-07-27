@@ -39,6 +39,7 @@ public static class DependencyInjection
         services.Configure<ProvidersOptions>(configuration.GetSection(ProvidersOptions.SectionName));
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<WorkerOptions>(configuration.GetSection(WorkerOptions.SectionName));
+        services.Configure<FfmpegOptions>(configuration.GetSection(FfmpegOptions.SectionName));
 
         var databaseConnection = configuration.GetSection(DatabaseOptions.SectionName)["ConnectionString"]
             ?? configuration.GetConnectionString("PostgreSQL")
@@ -76,6 +77,7 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.UserAgent.ParseAdd("SocialReelSaver/1.0");
         });
         services.AddSingleton<MetaGraphMediaResolver>();
+        services.AddSingleton<YtDlpMediaResolver>();
         services.AddSingleton<IMediaProvider, InstagramProvider>();
         services.AddSingleton<IMediaProvider, FacebookProvider>();
         services.AddSingleton<IMediaProviderFactory, MediaProviderFactory>();
@@ -95,6 +97,7 @@ public static class DependencyInjection
 
         services.AddSingleton<LocalSignedUrlProvider>();
         services.AddSingleton<CloudSignedUrlProvider>();
+        services.AddSingleton<IMediaThumbnailUrlService, MediaThumbnailUrlService>();
         services.AddSingleton<ISignedUrlProvider>(sp =>
         {
             var provider = sp.GetRequiredService<IOptions<ObjectStorageOptions>>().Value.Provider;

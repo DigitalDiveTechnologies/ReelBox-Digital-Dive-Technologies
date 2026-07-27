@@ -32,6 +32,7 @@ public sealed class MediaStatusService : IMediaStatusService
 
         Transition(item, MediaStatus.Downloading);
         item.DownloadStartedAt ??= DateTimeOffset.UtcNow;
+        item.NextRetryAt = null;
         item.ProgressPercent = 10;
         await PersistAsync(item, cancellationToken);
     }
@@ -101,6 +102,7 @@ public sealed class MediaStatusService : IMediaStatusService
         item.DownloadedAt = DateTimeOffset.UtcNow;
         item.ErrorCode = null;
         item.ErrorMessage = null;
+        item.NextRetryAt = null;
         item.ProgressPercent = 100;
         await PersistAsync(item, cancellationToken);
     }
@@ -114,12 +116,17 @@ public sealed class MediaStatusService : IMediaStatusService
         Transition(item, MediaStatus.Failed);
         item.ErrorCode = SrsMediaErrorCodes.ToPublic(errorCode);
         item.ErrorMessage = errorMessage;
+        item.NextRetryAt = null;
         await PersistAsync(item, cancellationToken);
     }
 
-    public async Task MarkQueuedAsync(MediaItem item, CancellationToken cancellationToken = default)
+    public async Task MarkQueuedAsync(
+        MediaItem item,
+        DateTimeOffset? nextRetryAt = null,
+        CancellationToken cancellationToken = default)
     {
         Transition(item, MediaStatus.Queued);
+        item.NextRetryAt = nextRetryAt;
         await PersistAsync(item, cancellationToken);
     }
 

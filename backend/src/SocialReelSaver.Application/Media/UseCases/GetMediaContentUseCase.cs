@@ -41,7 +41,9 @@ public sealed class GetMediaContentUseCase
             throw new NotFoundException("Media item not found.");
         }
 
-        if (!string.Equals(item.MediaStorageKey, storageKey, StringComparison.Ordinal))
+        var isMediaKey = string.Equals(item.MediaStorageKey, storageKey, StringComparison.Ordinal);
+        var isThumbnailKey = string.Equals(item.ThumbnailStorageKey, storageKey, StringComparison.Ordinal);
+        if (!isMediaKey && !isThumbnailKey)
         {
             throw new UnauthorizedAppException("Playback URL does not match media storage key.");
         }
@@ -52,9 +54,13 @@ public sealed class GetMediaContentUseCase
             throw new NotFoundException("Media object was not found in storage.");
         }
 
+        var contentType = storageObject.Metadata.ContentType
+            ?? (isThumbnailKey ? "image/jpeg" : item.MimeType)
+            ?? "application/octet-stream";
+
         return new MediaContentResult(
             storageObject.Content,
-            storageObject.Metadata.ContentType ?? item.MimeType ?? "application/octet-stream",
+            contentType,
             Path.GetFileName(storageKey));
     }
 }

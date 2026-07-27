@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/media_platform.dart';
+import 'instagram_icon.dart';
 
 /// Compact platform badge for library and download cards (SRS §7).
 class PlatformBadge extends StatelessWidget {
@@ -32,11 +33,16 @@ class PlatformBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            isIg ? Icons.camera_alt_outlined : Icons.public_outlined,
-            size: compact ? 12 : 14,
-            color: scheme.onSurface.withValues(alpha: 0.85),
-          ),
+          isIg
+              ? InstagramIcon(
+                  size: compact ? 12 : 14,
+                  color: scheme.onSurface.withValues(alpha: 0.85),
+                )
+              : Icon(
+                  Icons.public_outlined,
+                  size: compact ? 12 : 14,
+                  color: scheme.onSurface.withValues(alpha: 0.85),
+                ),
           const SizedBox(width: 4),
           Text(
             compact ? platform.shortLabel : platform.label,

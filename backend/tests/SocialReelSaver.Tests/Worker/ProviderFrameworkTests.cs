@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using SocialReelSaver.Application.Abstractions.Downloading;
 using SocialReelSaver.Application.Abstractions.Providers;
 using SocialReelSaver.Domain.Enums;
 using SocialReelSaver.Infrastructure.Providers;
@@ -62,7 +63,10 @@ public sealed class ProviderFrameworkTests
     {
         var resolver = CreateResolver(new ProvidersOptions());
         var validator = new ProviderResultValidator(resolver);
-        var provider = new InstagramProvider(resolver);
+        var provider = new InstagramProvider(
+            resolver,
+            CreateYtDlp(new ProvidersOptions { Resolver = "MetaGraph" }),
+            Options.Create(new ProvidersOptions { Resolver = "MetaGraph" }));
 
         var missing = validator.Validate(ProviderResult.Ok(" "), provider);
         Assert.False(missing.Success);
@@ -112,11 +116,11 @@ public sealed class ProviderFrameworkTests
             var path = request.RequestUri!.AbsolutePath;
             if (path.Contains("instagram_oembed", StringComparison.Ordinal))
             {
-                return JsonResponse("""{"html":"<blockquote/>","title":"My Reel","provider_name":"Instagram","type":"rich","version":"1.0"}""");
+                return JsonResponse("""{"html":"<blockquote/>","author_name":"real_creator","title":"My Reel Caption","provider_name":"Instagram","type":"rich","version":"1.0"}""");
             }
 
             // Graph /?id= lookup
-            return JsonResponse("""{"media_url":"https://scontent.cdninstagram.com/v/t51/video.mp4","title":"My Reel"}""");
+            return JsonResponse("""{"media_url":"https://scontent.cdninstagram.com/v/t51/video.mp4","title":"Graph Title"}""");
         });
 
         var options = new ProvidersOptions { AccessToken = "test-token" };
@@ -126,8 +130,31 @@ public sealed class ProviderFrameworkTests
 
         Assert.True(outcome.Result.Success);
         Assert.Equal("https://scontent.cdninstagram.com/v/t51/video.mp4", outcome.Result.ResolvedSourceUrl);
-        Assert.Equal("My Reel", outcome.Result.Title);
+        Assert.Equal("Graph Title", outcome.Result.Title);
         Assert.False(outcome.Diagnostics.IsPlaceholder);
+    }
+
+    [Fact]
+    public async Task Executor_WhenGraphTitleMissing_PrefersOEmbedAuthorName()
+    {
+        var handler = new ScriptedHandler(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path.Contains("instagram_oembed", StringComparison.Ordinal))
+            {
+                return JsonResponse("""{"html":"<blockquote/>","author_name":"travel_real","title":"caption text","provider_name":"Instagram","type":"rich","version":"1.0"}""");
+            }
+
+            return JsonResponse("""{"media_url":"https://scontent.cdninstagram.com/v/t51/video.mp4"}""");
+        });
+
+        var options = new ProvidersOptions { AccessToken = "test-token" };
+        var providers = CreateRealProviders(options, handler);
+        var executor = CreateExecutor(providers, options);
+        var outcome = await executor.ExecuteAsync(CreateContext(MediaPlatform.Instagram));
+
+        Assert.True(outcome.Result.Success);
+        Assert.Equal("travel_real", outcome.Result.Title);
     }
 
     [Fact]
@@ -236,9 +263,33 @@ public sealed class ProviderFrameworkTests
         ProvidersOptions? options = null,
         HttpMessageHandler? httpHandler = null)
     {
-        var resolver = CreateResolver(options ?? new ProvidersOptions(), httpHandler);
-        return [new InstagramProvider(resolver), new FacebookProvider(resolver)];
+        // Provider framework unit tests mock Meta Graph HTTP responses.
+        var opts = CloneForMetaGraph(options ?? new ProvidersOptions());
+        var meta = CreateResolver(opts, httpHandler);
+        var ytDlp = CreateYtDlp(opts);
+        var o = Options.Create(opts);
+        return [new InstagramProvider(meta, ytDlp, o), new FacebookProvider(meta, ytDlp, o)];
     }
+
+    private static ProvidersOptions CloneForMetaGraph(ProvidersOptions source) => new()
+    {
+        TimeoutSeconds = source.TimeoutSeconds,
+        MaximumExecutionSeconds = source.MaximumExecutionSeconds,
+        GraphApiBaseUrl = source.GraphApiBaseUrl,
+        AccessToken = source.AccessToken,
+        AllowedResolvedHostSuffixes = source.AllowedResolvedHostSuffixes,
+        Instagram = source.Instagram,
+        Facebook = source.Facebook,
+        Resolver = "MetaGraph",
+        YtDlpExecutablePath = source.YtDlpExecutablePath,
+        YtDlpTimeoutSeconds = source.YtDlpTimeoutSeconds,
+    };
+
+    private static YtDlpMediaResolver CreateYtDlp(ProvidersOptions options) =>
+        new(
+            new NoOpTemporaryFileManager(),
+            Options.Create(options),
+            NullLogger<YtDlpMediaResolver>.Instance);
 
     private static MetaGraphMediaResolver CreateResolver(
         ProvidersOptions options,
@@ -251,6 +302,18 @@ public sealed class ProviderFrameworkTests
             factory,
             Options.Create(options),
             NullLogger<MetaGraphMediaResolver>.Instance);
+    }
+
+    private sealed class NoOpTemporaryFileManager : ITemporaryFileManager
+    {
+        public string CreateTempFilePath(Guid mediaId, string? extension = null) =>
+            Path.Combine(Path.GetTempPath(), $"{mediaId:N}{extension ?? ".bin"}");
+
+        public Task CleanupAsync(string? path, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task CleanupMediaTempAsync(Guid mediaId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private static ProviderContext CreateContext(MediaPlatform platform) => new()

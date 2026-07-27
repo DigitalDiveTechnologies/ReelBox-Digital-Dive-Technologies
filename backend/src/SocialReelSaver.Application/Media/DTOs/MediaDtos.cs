@@ -24,7 +24,8 @@ public sealed record MediaResponse(
     string? ErrorCode,
     string? ErrorMessage,
     int RetryCount,
-    string? Source);
+    string? Source,
+    string? ThumbnailUrl = null);
 
 public sealed record MediaListResponse(
     IReadOnlyList<MediaResponse> Items,
@@ -41,4 +42,5 @@ public sealed record PlaybackResponse(
     string? MimeType,
     string? PlaybackUrl,
     string Delivery,
-    DateTimeOffset? ExpiresAt);
+    DateTimeOffset? ExpiresAt,
+    string? ThumbnailUrl = null);

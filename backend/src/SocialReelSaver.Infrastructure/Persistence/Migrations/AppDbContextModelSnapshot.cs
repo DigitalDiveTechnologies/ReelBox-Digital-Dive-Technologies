@@ -67,6 +67,10 @@ namespace SocialReelSaver.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(127)")
                         .HasColumnName("mime_type");
 
+                    b.Property<DateTimeOffset?>("NextRetryAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_retry_at");
+
                     b.Property<string>("NormalizedUrl")
                         .HasColumnType("text")
                         .HasColumnName("normalized_url");
@@ -117,6 +121,9 @@ namespace SocialReelSaver.Infrastructure.Persistence.Migrations
                         .HasColumnName("user_id");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Status", "NextRetryAt")
+                        .HasDatabaseName("ix_media_items_status_next_retry_at");
 
                     b.HasIndex("UserId", "CreatedAt")
                         .IsDescending(false, true)
@@ -185,6 +192,22 @@ namespace SocialReelSaver.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_users_email");
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("SocialReelSaver.Domain.Entities.MediaItem", b =>
+                {
+                    b.HasOne("SocialReelSaver.Domain.Entities.User", "User")
+                        .WithMany("MediaItems")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SocialReelSaver.Domain.Entities.User", b =>
+                {
+                    b.Navigation("MediaItems");
                 });
 #pragma warning restore 612, 618
         }

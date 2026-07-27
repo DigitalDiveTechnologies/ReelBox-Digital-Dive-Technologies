@@ -1,288 +1,212 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/errors/app_exception.dart';
 import '../../../../core/router/route_paths.dart';
-import '../../../../shared/data/ui_placeholder_catalog.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_gradients.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/models/media_item_preview.dart';
 import '../../../../shared/models/media_platform.dart';
-import '../../../../shared/models/media_status.dart';
 import '../../../../shared/widgets/app_empty_state.dart';
+import '../../../media/presentation/providers/media_providers.dart';
+import '../widgets/library_filter_chips.dart';
 import '../widgets/library_media_card.dart';
-import '../widgets/library_toolbar.dart';
 
-enum LibraryLayoutMode { grid, list }
-
-enum LibrarySortMode { newest, oldest, status }
-
-/// Library / Downloads screen (SRS §7 / FR-013 UI shell).
-class LibraryPage extends StatefulWidget {
+/// Library / Downloads screen (SRS §7 / FR-013) — real API data only.
+///
+/// Presentation is design-locked to the approved Library mockup.
+class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
 
   @override
-  State<LibraryPage> createState() => _LibraryPageState();
+  ConsumerState<LibraryPage> createState() => _LibraryPageState();
 }
 
-class _LibraryPageState extends State<LibraryPage> {
-  final _searchController = TextEditingController();
-  LibraryLayoutMode _layout = LibraryLayoutMode.grid;
-  LibrarySortMode _sort = LibrarySortMode.newest;
+class _LibraryPageState extends ConsumerState<LibraryPage>
+    with WidgetsBindingObserver {
   MediaPlatform? _platformFilter;
-  MediaStatus? _statusFilter;
+  Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      final async = ref.read(mediaListProvider);
+      final items = async.asData?.value;
+      if (items == null) return;
+      if (items.any((e) => e.isActive)) {
+        ref.invalidate(mediaListProvider);
+      }
+    });
+  }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _pollTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  List<MediaItemPreview> get _filtered {
-    var items = List<MediaItemPreview>.from(UiPlaceholderCatalog.all);
-    final query = _searchController.text.trim().toLowerCase();
-
-    if (query.isNotEmpty) {
-      items = items
-          .where(
-            (m) =>
-                m.displayTitle.toLowerCase().contains(query) ||
-                m.originalUrl.toLowerCase().contains(query) ||
-                m.platform.label.toLowerCase().contains(query),
-          )
-          .toList();
-    }
-    if (_platformFilter != null) {
-      items = items.where((m) => m.platform == _platformFilter).toList();
-    }
-    if (_statusFilter != null) {
-      items = items.where((m) => m.status == _statusFilter).toList();
-    }
-
-    switch (_sort) {
-      case LibrarySortMode.newest:
-        items.sort((a, b) => b.savedAt.compareTo(a.savedAt));
-      case LibrarySortMode.oldest:
-        items.sort((a, b) => a.savedAt.compareTo(b.savedAt));
-      case LibrarySortMode.status:
-        items.sort((a, b) => a.status.index.compareTo(b.status.index));
-    }
-    return items;
-  }
-
-  Future<void> _openFilterSheet() async {
-    MediaPlatform? platform = _platformFilter;
-    MediaStatus? status = _statusFilter;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Filter', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 16),
-                  Text('Platform', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      FilterChip(
-                        label: const Text('All'),
-                        selected: platform == null,
-                        onSelected: (_) => setModalState(() => platform = null),
-                      ),
-                      ...MediaPlatform.values.map(
-                        (p) => FilterChip(
-                          label: Text(p.label),
-                          selected: platform == p,
-                          onSelected: (_) => setModalState(() => platform = p),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Status', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      FilterChip(
-                        label: const Text('All'),
-                        selected: status == null,
-                        onSelected: (_) => setModalState(() => status = null),
-                      ),
-                      ...MediaStatus.values.map(
-                        (s) => FilterChip(
-                          label: Text(_statusLabel(s)),
-                          selected: status == s,
-                          onSelected: (_) => setModalState(() => status = s),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: () {
-                      setState(() {
-                        _platformFilter = platform;
-                        _statusFilter = status;
-                      });
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text('Apply filters'),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _openSortMenu() async {
-    final selected = await showModalBottomSheet<LibrarySortMode>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                title: Text('Sort', style: Theme.of(context).textTheme.titleLarge),
-              ),
-              ListTile(
-                leading: Icon(
-                  _sort == LibrarySortMode.newest
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_off,
-                ),
-                title: const Text('Newest first'),
-                onTap: () => Navigator.pop(context, LibrarySortMode.newest),
-              ),
-              ListTile(
-                leading: Icon(
-                  _sort == LibrarySortMode.oldest
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_off,
-                ),
-                title: const Text('Oldest first'),
-                onTap: () => Navigator.pop(context, LibrarySortMode.oldest),
-              ),
-              ListTile(
-                leading: Icon(
-                  _sort == LibrarySortMode.status
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_off,
-                ),
-                title: const Text('By status'),
-                onTap: () => Navigator.pop(context, LibrarySortMode.status),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-    if (selected != null) {
-      setState(() => _sort = selected);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(mediaListProvider);
     }
   }
 
-  String _statusLabel(MediaStatus status) => switch (status) {
-        MediaStatus.preparing => 'Preparing',
-        MediaStatus.queued => 'Queued',
-        MediaStatus.downloading => 'Downloading',
-        MediaStatus.processing => 'Processing',
-        MediaStatus.completed => 'Completed',
-        MediaStatus.failed => 'Failed',
-      };
+  List<MediaItemPreview> _filtered(List<MediaItemPreview> items) {
+    final filtered = _platformFilter == null
+        ? List<MediaItemPreview>.from(items)
+        : items.where((m) => m.platform == _platformFilter).toList();
+    filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return filtered;
+  }
+
+  Future<void> _refresh() async {
+    ref.invalidate(mediaListProvider);
+    await ref.read(mediaListProvider.future);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final items = _filtered;
+    final horizontal = AppSpacing.horizontalInset(context);
+    final mediaAsync = ref.watch(mediaListProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Library'),
-        actions: [
-          IconButton(
-            tooltip: _layout == LibraryLayoutMode.grid ? 'List layout' : 'Grid layout',
-            onPressed: () {
-              setState(() {
-                _layout = _layout == LibraryLayoutMode.grid
-                    ? LibraryLayoutMode.list
-                    : LibraryLayoutMode.grid;
-              });
-            },
-            icon: Icon(
-              _layout == LibraryLayoutMode.grid
-                  ? Icons.view_list_rounded
-                  : Icons.grid_view_rounded,
-            ),
-          ),
-        ],
-      ),
-      body: Column(
+      backgroundColor: AppColors.splashBgDeep,
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: LibraryToolbar(
-              searchController: _searchController,
-              onSearchChanged: (_) => setState(() {}),
-              onFilter: _openFilterSheet,
-              onSort: _openSortMenu,
+          const DecoratedBox(
+            decoration: BoxDecoration(gradient: AppGradients.splashBackground),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0.85, -0.95),
+                radius: 1.0,
+                colors: [
+                  AppColors.splashBgMahogany.withValues(alpha: 0.55),
+                  AppColors.splashBgMahogany.withValues(alpha: 0),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: items.isEmpty
-                ? const AppEmptyState(
-                    icon: Icons.video_library_outlined,
-                    title: 'No media found',
-                    message:
-                        'Saved reels appear here. Adjust search or filters, or save a new URL from Home.',
-                  )
-                : _layout == LibraryLayoutMode.grid
-                    ? GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 220,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 0.68,
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontal,
+                        AppSpacing.md,
+                        horizontal,
+                        0,
+                      ),
+                      child: const Text(
+                        'Library',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.4,
+                          color: AppColors.splashTextPrimary,
                         ),
-                        itemCount: items.length,
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          return LibraryMediaCard(
-                            item: item,
-                            dense: false,
-                            onTap: () =>
-                                context.push(RoutePaths.mediaDetailPath(item.id)),
-                          );
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: horizontal),
+                      child: LibraryFilterChips(
+                        selected: _platformFilter,
+                        onSelected: (platform) {
+                          setState(() => _platformFilter = platform);
                         },
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                        itemCount: items.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
-                        itemBuilder: (context, index) {
-                          final item = items[index];
-                          return LibraryMediaCard(
-                            item: item,
-                            dense: true,
-                            onTap: () =>
-                                context.push(RoutePaths.mediaDetailPath(item.id)),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Expanded(
+                      child: mediaAsync.when(
+                        loading: () => const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.splashTextPrimary,
+                          ),
+                        ),
+                        error: (error, _) => AppEmptyState(
+                          icon: Icons.cloud_off_outlined,
+                          title: 'Could not load library',
+                          message: error is AppException
+                              ? error.message
+                              : 'Check your connection and try again.',
+                        ),
+                        data: (allItems) {
+                          final items = _filtered(allItems);
+                          if (items.isEmpty) {
+                            return RefreshIndicator(
+                              color: AppColors.splashTextPrimary,
+                              backgroundColor: AppColors.splashBgNavy,
+                              onRefresh: _refresh,
+                              child: ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                children: const [
+                                  SizedBox(height: 120),
+                                  AppEmptyState(
+                                    icon: Icons.video_library_outlined,
+                                    title: 'No media found',
+                                    message:
+                                        'Saved reels appear here. Adjust filters, or save a new URL from Home.',
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          return RefreshIndicator(
+                            color: AppColors.splashTextPrimary,
+                            backgroundColor: AppColors.splashBgNavy,
+                            onRefresh: _refresh,
+                            child: GridView.builder(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: EdgeInsets.fromLTRB(
+                                horizontal,
+                                0,
+                                horizontal,
+                                AppSpacing.xxl,
+                              ),
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: AppSpacing.md,
+                                crossAxisSpacing: AppSpacing.md,
+                                childAspectRatio: 0.72,
+                              ),
+                              itemCount: items.length,
+                              itemBuilder: (context, index) {
+                                final item = items[index];
+                                return LibraryMediaCard(
+                                  item: item,
+                                  onTap: () => context.push(
+                                    RoutePaths.mediaDetailPath(item.id),
+                                  ),
+                                );
+                              },
+                            ),
                           );
                         },
                       ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),

@@ -11,6 +11,8 @@ public sealed class MediaItem
 
     public Guid UserId { get; set; }
 
+    public User? User { get; set; }
+
     public string OriginalUrl { get; set; } = string.Empty;
 
     public string? NormalizedUrl { get; set; }
@@ -40,6 +42,11 @@ public sealed class MediaItem
     public DateTimeOffset? DownloadedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Optional worker backoff schedule (SRS §12.2 status / next_retry_at index).
+    /// </summary>
+    public DateTimeOffset? NextRetryAt { get; set; }
 
     public string? ErrorCode { get; set; }
 

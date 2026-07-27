@@ -6,7 +6,7 @@ import 'env.dart';
 /// ```bash
 /// flutter run \
 ///   --dart-define=ENV=dev \
-///   --dart-define=API_BASE_URL=http://localhost:5000
+///   --dart-define=API_BASE_URL=http://localhost:5080
 /// ```
 class AppConfig {
   const AppConfig._();
@@ -18,7 +18,7 @@ class AppConfig {
 
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:5000',
+    defaultValue: 'http://192.168.100.8:5080',
   );
 
   static Env get env => Env.fromString(_envRaw);

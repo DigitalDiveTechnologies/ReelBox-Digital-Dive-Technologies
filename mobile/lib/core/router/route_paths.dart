@@ -7,8 +7,10 @@ abstract final class RoutePaths {
   static const String home = '/home';
   static const String library = '/library';
   static const String mediaDetail = '/media/:id';
+  static const String mediaPlayer = '/media/:id/play';
   static const String settings = '/settings';
   static const String share = '/share';
 
   static String mediaDetailPath(String id) => '/media/$id';
+  static String mediaPlayerPath(String id) => '/media/$id/play';
 }

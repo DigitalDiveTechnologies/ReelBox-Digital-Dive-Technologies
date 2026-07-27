@@ -1,28 +1,36 @@
-import '../../../../core/errors/app_exception.dart';
 import '../../domain/entities/auth_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_local_datasource.dart';
 import '../datasources/auth_remote_datasource.dart';
+import '../models/auth_user_model.dart';
 
-/// Empty [AuthRepository] implementation.
-///
-/// TODO: Orchestrate remote auth APIs + local token storage in a later sprint.
 class AuthRepositoryImpl implements AuthRepository {
   const AuthRepositoryImpl({
     required this.remoteDataSource,
     required this.localDataSource,
   });
 
-  // Kept for future wiring; unused until backend auth is implemented.
-  // ignore: unused_field
   final AuthRemoteDataSource remoteDataSource;
-  // ignore: unused_field
   final AuthLocalDataSource localDataSource;
 
   @override
   Future<AuthUser?> getCurrentUser() async {
-    // TODO: Use local tokens + optional backend /me API; map DTO → [AuthUser].
-    return null;
+    final token = await localDataSource.getAccessToken();
+    if (token == null || token.isEmpty) {
+      return null;
+    }
+
+    try {
+      final model = await remoteDataSource.getCurrentUser();
+      return model?.toDomain();
+    } catch (_) {
+      final refreshed = await _refreshIfPossible();
+      if (!refreshed) {
+        return null;
+      }
+      final model = await remoteDataSource.getCurrentUser();
+      return model?.toDomain();
+    }
   }
 
   @override
@@ -30,22 +38,73 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
   }) async {
-    // TODO: Call remote login API, persist tokens locally, return domain user.
-    // No fake session — surface a catchable placeholder failure instead of crashing.
-    throw const AppException(
-      message: 'Login is not available yet.',
-      code: 'AUTH_NOT_IMPLEMENTED',
+    final session = await remoteDataSource.login(
+      email: email.trim(),
+      password: password,
     );
+    await localDataSource.saveTokens(
+      accessToken: session.tokens.accessToken,
+      refreshToken: session.tokens.refreshToken,
+    );
+    return session.user.toDomain();
+  }
+
+  @override
+  Future<AuthUser> register({
+    required String email,
+    required String password,
+  }) async {
+    final session = await remoteDataSource.register(
+      email: email.trim(),
+      password: password,
+    );
+    await localDataSource.saveTokens(
+      accessToken: session.tokens.accessToken,
+      refreshToken: session.tokens.refreshToken,
+    );
+    return session.user.toDomain();
   }
 
   @override
   Future<void> logout() async {
-    // TODO: Call remote logout API (if required) and clear local session.
+    try {
+      await remoteDataSource.logout();
+    } catch (_) {
+      // Always clear local session even if revoke fails.
+    }
+    await localDataSource.clearSession();
   }
 
   @override
   Future<bool> isAuthenticated() async {
-    // TODO: Inspect local tokens / expiry; refresh via backend when needed.
-    return false;
+    final access = await localDataSource.getAccessToken();
+    if (access != null && access.isNotEmpty) {
+      return true;
+    }
+    return _refreshIfPossible();
   }
+
+  Future<bool> _refreshIfPossible() async {
+    final refresh = await localDataSource.getRefreshToken();
+    if (refresh == null || refresh.isEmpty) {
+      await localDataSource.clearSession();
+      return false;
+    }
+
+    try {
+      final session = await remoteDataSource.refreshToken(refreshToken: refresh);
+      await localDataSource.saveTokens(
+        accessToken: session.tokens.accessToken,
+        refreshToken: session.tokens.refreshToken,
+      );
+      return true;
+    } catch (_) {
+      await localDataSource.clearSession();
+      return false;
+    }
+  }
+}
+
+extension on AuthUserModel {
+  AuthUser toDomain() => AuthUser(id: id, email: email);
 }

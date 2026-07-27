@@ -41,6 +41,9 @@ docker compose -f docker/docker-compose.yml up --build
 
 ## Environment
 
+Copy [`backend/.env.example`](.env.example) for the variable names. ASP.NET Core reads them
+from the process environment (and `appsettings*.json`); a literal `.env` file is optional.
+
 Override via environment variables (double-underscore nesting), for example:
 
 ```text
@@ -51,6 +54,10 @@ Database__ConnectionString=...
 Redis__ConnectionString=...
 ObjectStorage__BucketName=...
 ```
+
+Database connection is configured in `appsettings.json` / env vars and wired through
+`Infrastructure` → EF Core `UseNpgsql`. Schema migrations live under
+`Infrastructure/Persistence/Migrations` (apply when running the API against PostgreSQL).
 
 ## Out of scope (this sprint)
 

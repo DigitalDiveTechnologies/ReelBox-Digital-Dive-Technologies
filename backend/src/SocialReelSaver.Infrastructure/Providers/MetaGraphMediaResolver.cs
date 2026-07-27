@@ -58,6 +58,9 @@ public sealed class MetaGraphMediaResolver
             return oembed.Failure!;
         }
 
+        // Prefer creator/channel identity from oEmbed author_name over generic title/caption.
+        var displayTitle = FirstNonEmpty(oembed.AuthorName, oembed.Title);
+
         // 2) Attempt official Graph lookup for a downloadable media_url/source when available.
         var graphMedia = await QueryGraphMediaUrlAsync(sourceUri, cancellationToken);
         if (graphMedia.Success && !string.IsNullOrWhiteSpace(graphMedia.MediaUrl))
@@ -69,12 +72,15 @@ public sealed class MetaGraphMediaResolver
                     originalUrl);
                 return ProviderResult.Failed(
                     ProviderErrorCode.AccessNotPermitted,
-                    "Resolved media host is not on the approved platform CDN allowlist.");
+                    "Resolved media host is not on the approved platform CDN allowlist.") with
+                {
+                    Title = displayTitle,
+                };
             }
 
             return ProviderResult.Ok(
                 graphMedia.MediaUrl!,
-                title: graphMedia.Title ?? oembed.Title,
+                title: FirstNonEmpty(graphMedia.Title, displayTitle),
                 mimeType: GuessMime(graphMedia.MediaUrl!),
                 extension: GuessExtension(graphMedia.MediaUrl!));
         }
@@ -82,7 +88,7 @@ public sealed class MetaGraphMediaResolver
         if (graphMedia.Failure is not null &&
             graphMedia.Failure.ErrorCode is ProviderErrorCode.TemporaryFailure or ProviderErrorCode.ProviderTimeout)
         {
-            return graphMedia.Failure;
+            return graphMedia.Failure with { Title = displayTitle };
         }
 
         // Official Meta APIs do not expose downloadable media binaries for arbitrary third-party posts.
@@ -90,7 +96,10 @@ public sealed class MetaGraphMediaResolver
         return ProviderResult.Failed(
             ProviderErrorCode.AccessNotPermitted,
             "Official Meta Graph APIs did not provide a downloadable media source for this content. " +
-            "The system will not bypass platform access controls to extract media.");
+            "The system will not bypass platform access controls to extract media.") with
+        {
+            Title = displayTitle,
+        };
     }
 
     private async Task<OEmbedProbe> QueryOEmbedAsync(
@@ -139,11 +148,11 @@ public sealed class MetaGraphMediaResolver
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            var title = doc.RootElement.TryGetProperty("title", out var titleProp)
-                ? titleProp.GetString()
-                : null;
+            var root = doc.RootElement;
+            var title = TryGetString(root, "title");
+            var authorName = TryGetString(root, "author_name");
 
-            return OEmbedProbe.Ok(title);
+            return OEmbedProbe.Ok(title, authorName);
         }
         catch (OperationCanceledException)
         {
@@ -345,10 +354,25 @@ public sealed class MetaGraphMediaResolver
     private static string GuessExtension(string url) =>
         url.Contains(".mov", StringComparison.OrdinalIgnoreCase) ? ".mov" : ".mp4";
 
-    private sealed record OEmbedProbe(bool Success, string? Title, ProviderResult? Failure)
+    private static string? FirstNonEmpty(params string?[] values)
     {
-        public static OEmbedProbe Ok(string? title) => new(true, title, null);
-        public static OEmbedProbe Fail(ProviderResult failure) => new(false, null, failure);
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private sealed record OEmbedProbe(bool Success, string? Title, string? AuthorName, ProviderResult? Failure)
+    {
+        public static OEmbedProbe Ok(string? title, string? authorName = null) =>
+            new(true, title, authorName, null);
+
+        public static OEmbedProbe Fail(ProviderResult failure) => new(false, null, null, failure);
     }
 
     private sealed record GraphMediaProbe(bool Success, string? MediaUrl, string? Title, ProviderResult? Failure)

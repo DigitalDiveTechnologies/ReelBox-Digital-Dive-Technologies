@@ -23,6 +23,73 @@ namespace SocialReelSaver.Tests.Worker;
 public sealed class MediaDownloadPipelineTests
 {
     [Fact]
+    public async Task ExecuteAsync_WhenTemporaryProviderFailure_SchedulesRetryWithNextRetryAt()
+    {
+        var item = CreateQueuedItem(MediaPlatform.Instagram);
+        var root = Path.Combine(Path.GetTempPath(), "srs-retry-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var repo = new FakeMediaRepository(item);
+            var status = new MediaStatusService(repo);
+            var publisher = new RecordingPublisher();
+            var downloadOptions = Options.Create(new DownloadOptions { TempFolder = root });
+            var storageOptions = Options.Create(new ObjectStorageOptions
+            {
+                Provider = "Local",
+                LocalRootPath = root,
+            });
+            var tempFiles = new TemporaryFileManager(downloadOptions);
+            var localStorage = new LocalObjectStorageService(
+                storageOptions,
+                NullLogger<LocalObjectStorageService>.Instance);
+
+            var pipeline = new MediaDownloadPipeline(
+                repo,
+                status,
+                CreateExecutor([new TemporaryFailureStubProvider()]),
+                new StubDownloader(tempFiles),
+                new DownloadValidator(downloadOptions),
+                new ThumbnailGenerator(
+                    tempFiles,
+                    Options.Create(new FfmpegOptions { ExecutablePath = "__srs_ffmpeg_missing__" }),
+                    NullLogger<ThumbnailGenerator>.Instance),
+                new FixedStorageFactory(localStorage),
+                tempFiles,
+                new ExponentialBackoffRetryPolicy(Options.Create(new WorkerOptions
+                {
+                    MaxRetries = 3,
+                    BaseBackoffSeconds = 2,
+                    MaxBackoffSeconds = 60,
+                })),
+                publisher,
+                storageOptions,
+                NullLogger<MediaDownloadPipeline>.Instance);
+
+            var before = DateTimeOffset.UtcNow;
+            await pipeline.ExecuteAsync(CreateJob(item));
+
+            Assert.Equal(MediaStatus.Queued, item.Status);
+            Assert.Equal(1, item.RetryCount);
+            Assert.NotNull(item.NextRetryAt);
+            Assert.True(item.NextRetryAt >= before.AddSeconds(2));
+            Assert.Equal("PROVIDER_TEMPORARY_FAILURE", item.ErrorCode);
+            Assert.Single(publisher.Jobs);
+            Assert.Equal(item.Id, publisher.Jobs[0].MediaId);
+            Assert.Equal(item.NextRetryAt, publisher.Jobs[0].NotBefore);
+            Assert.Equal(1, publisher.Jobs[0].Attempt);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenProviderCannotResolveDownloadableSource_MarksFailed()
     {
         var item = CreateQueuedItem(MediaPlatform.Instagram);
@@ -33,13 +100,21 @@ public sealed class MediaDownloadPipelineTests
                 System.Text.Encoding.UTF8,
                 "application/json"),
         });
+        var metaOpts = Options.Create(new ProvidersOptions { Resolver = "MetaGraph" });
         var meta = new MetaGraphMediaResolver(
             new TestHttpClientFactory(handler),
-            Options.Create(new ProvidersOptions()),
+            metaOpts,
             NullLogger<MetaGraphMediaResolver>.Instance);
+        var ytDlp = new YtDlpMediaResolver(
+            new PipelineTestTempFiles(),
+            metaOpts,
+            NullLogger<YtDlpMediaResolver>.Instance);
         var pipeline = CreatePipeline(
             item,
-            CreateExecutor([new InstagramProvider(meta), new FacebookProvider(meta)]));
+            CreateExecutor([
+                new InstagramProvider(meta, ytDlp, metaOpts),
+                new FacebookProvider(meta, ytDlp, metaOpts),
+            ]));
 
         await pipeline.ExecuteAsync(CreateJob(item));
 
@@ -97,7 +172,10 @@ public sealed class MediaDownloadPipelineTests
                 executor,
                 downloader,
                 validator,
-                new ThumbnailGenerator(),
+                new ThumbnailGenerator(
+                    tempFiles,
+                    Options.Create(new FfmpegOptions { ExecutablePath = "__srs_ffmpeg_missing__" }),
+                    NullLogger<ThumbnailGenerator>.Instance),
                 factory,
                 tempFiles,
                 retry,
@@ -149,7 +227,10 @@ public sealed class MediaDownloadPipelineTests
             executor,
             new StubDownloader(tempFiles),
             new DownloadValidator(downloadOptions),
-            new ThumbnailGenerator(),
+            new ThumbnailGenerator(
+                tempFiles,
+                Options.Create(new FfmpegOptions { ExecutablePath = "__srs_ffmpeg_missing__" }),
+                NullLogger<ThumbnailGenerator>.Instance),
             new FixedStorageFactory(localStorage),
             tempFiles,
             new ExponentialBackoffRetryPolicy(Options.Create(new WorkerOptions
@@ -206,6 +287,35 @@ public sealed class MediaDownloadPipelineTests
         OriginalUrl = item.OriginalUrl,
         Attempt = 0,
     };
+
+    private sealed class TemporaryFailureStubProvider : IMediaProvider
+    {
+        public string Name => nameof(TemporaryFailureStubProvider);
+
+        public MediaPlatform Platform => MediaPlatform.Instagram;
+
+        public ProviderCapabilities Capabilities { get; } = ProviderCapabilities.ProductionReady();
+
+        public Task<ProviderResult> ExecuteAsync(
+            ProviderContext context,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(ProviderResult.Failed(
+                ProviderErrorCode.TemporaryFailure,
+                "transient provider failure"));
+    }
+
+    private sealed class RecordingPublisher : IMediaJobPublisher
+    {
+        public List<MediaDownloadJob> Jobs { get; } = [];
+
+        public Task PublishDownloadJobAsync(
+            MediaDownloadJob job,
+            CancellationToken cancellationToken = default)
+        {
+            Jobs.Add(job);
+            return Task.CompletedTask;
+        }
+    }
 
     private sealed class StubProvider : IMediaProvider
     {
@@ -310,5 +420,17 @@ public sealed class MediaDownloadPipelineTests
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task UpdateAsync(MediaItem item, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class PipelineTestTempFiles : ITemporaryFileManager
+    {
+        public string CreateTempFilePath(Guid mediaId, string? extension = null) =>
+            Path.Combine(Path.GetTempPath(), $"{mediaId:N}{extension ?? ".bin"}");
+
+        public Task CleanupAsync(string? path, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task CleanupMediaTempAsync(Guid mediaId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

@@ -1,54 +1,76 @@
-import '../../../../core/errors/app_exception.dart';
+import '../../../../core/constants/api_endpoints.dart';
+import '../../../../core/network/api_client.dart';
+import '../models/auth_session_model.dart';
 import '../models/auth_user_model.dart';
 
-/// Remote auth data source placeholder.
-///
-/// TODO: Perform HTTP calls to backend auth endpoints (login, logout, me, refresh).
+/// Remote auth data source (SRS §22 JWT endpoints).
 abstract class AuthRemoteDataSource {
-  /// TODO: POST /api/v1/auth/login (or equivalent) when backend is ready.
-  Future<AuthUserModel> login({
+  Future<AuthSessionModel> login({
     required String email,
     required String password,
   });
 
-  /// TODO: POST /api/v1/auth/logout (or equivalent) when backend is ready.
+  Future<AuthSessionModel> register({
+    required String email,
+    required String password,
+  });
+
   Future<void> logout();
 
-  /// TODO: GET /api/v1/auth/me (or equivalent) when backend is ready.
   Future<AuthUserModel?> getCurrentUser();
 
-  /// TODO: POST /api/v1/auth/refresh when JWT refresh is implemented.
-  Future<void> refreshToken();
+  Future<AuthSessionModel> refreshToken({required String refreshToken});
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
-  const AuthRemoteDataSourceImpl();
+  AuthRemoteDataSourceImpl(this._api);
+
+  final ApiClient _api;
 
   @override
-  Future<AuthUserModel> login({
+  Future<AuthSessionModel> login({
     required String email,
     required String password,
   }) async {
-    // TODO: Call backend login API. Do not implement fake authentication.
-    throw const AppException(
-      message: 'Login API is not wired yet.',
-      code: 'AUTH_NOT_IMPLEMENTED',
+    final json = await _api.postJson(
+      ApiEndpoints.authLogin,
+      body: {'email': email, 'password': password},
+      authenticated: false,
     );
+    return AuthSessionModel.fromJson(json);
+  }
+
+  @override
+  Future<AuthSessionModel> register({
+    required String email,
+    required String password,
+  }) async {
+    final json = await _api.postJson(
+      ApiEndpoints.authRegister,
+      body: {'email': email, 'password': password},
+      authenticated: false,
+    );
+    return AuthSessionModel.fromJson(json);
   }
 
   @override
   Future<void> logout() async {
-    // TODO: Call backend logout / token-revoke API.
+    await _api.postJson(ApiEndpoints.authLogout, body: <String, dynamic>{});
   }
 
   @override
   Future<AuthUserModel?> getCurrentUser() async {
-    // TODO: Call backend current-user API.
-    return null;
+    final json = await _api.getJson(ApiEndpoints.authMe);
+    return AuthUserModel.fromJson(json);
   }
 
   @override
-  Future<void> refreshToken() async {
-    // TODO: Call backend token refresh API.
+  Future<AuthSessionModel> refreshToken({required String refreshToken}) async {
+    final json = await _api.postJson(
+      ApiEndpoints.authRefresh,
+      body: {'refreshToken': refreshToken},
+      authenticated: false,
+    );
+    return AuthSessionModel.fromJson(json);
   }
 }

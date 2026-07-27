@@ -8,11 +8,18 @@ namespace SocialReelSaver.Infrastructure.Providers;
 
 public sealed class InstagramProvider : IMediaProvider
 {
-    private readonly MetaGraphMediaResolver _resolver;
+    private readonly MetaGraphMediaResolver _metaResolver;
+    private readonly YtDlpMediaResolver _ytDlpResolver;
+    private readonly ProvidersOptions _options;
 
-    public InstagramProvider(MetaGraphMediaResolver resolver)
+    public InstagramProvider(
+        MetaGraphMediaResolver metaResolver,
+        YtDlpMediaResolver ytDlpResolver,
+        IOptions<ProvidersOptions> options)
     {
-        _resolver = resolver;
+        _metaResolver = metaResolver;
+        _ytDlpResolver = ytDlpResolver;
+        _options = options.Value;
     }
 
     public string Name => nameof(InstagramProvider);
@@ -24,16 +31,28 @@ public sealed class InstagramProvider : IMediaProvider
     public Task<ProviderResult> ExecuteAsync(
         ProviderContext context,
         CancellationToken cancellationToken = default) =>
-        _resolver.ResolveAsync(Platform, context.OriginalUrl, cancellationToken);
+        UseYtDlp
+            ? _ytDlpResolver.ResolveAsync(Platform, context.OriginalUrl, context.MediaId, cancellationToken)
+            : _metaResolver.ResolveAsync(Platform, context.OriginalUrl, cancellationToken);
+
+    private bool UseYtDlp =>
+        string.Equals(_options.Resolver, "YtDlp", StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed class FacebookProvider : IMediaProvider
 {
-    private readonly MetaGraphMediaResolver _resolver;
+    private readonly MetaGraphMediaResolver _metaResolver;
+    private readonly YtDlpMediaResolver _ytDlpResolver;
+    private readonly ProvidersOptions _options;
 
-    public FacebookProvider(MetaGraphMediaResolver resolver)
+    public FacebookProvider(
+        MetaGraphMediaResolver metaResolver,
+        YtDlpMediaResolver ytDlpResolver,
+        IOptions<ProvidersOptions> options)
     {
-        _resolver = resolver;
+        _metaResolver = metaResolver;
+        _ytDlpResolver = ytDlpResolver;
+        _options = options.Value;
     }
 
     public string Name => nameof(FacebookProvider);
@@ -45,7 +64,12 @@ public sealed class FacebookProvider : IMediaProvider
     public Task<ProviderResult> ExecuteAsync(
         ProviderContext context,
         CancellationToken cancellationToken = default) =>
-        _resolver.ResolveAsync(Platform, context.OriginalUrl, cancellationToken);
+        UseYtDlp
+            ? _ytDlpResolver.ResolveAsync(Platform, context.OriginalUrl, context.MediaId, cancellationToken)
+            : _metaResolver.ResolveAsync(Platform, context.OriginalUrl, cancellationToken);
+
+    private bool UseYtDlp =>
+        string.Equals(_options.Resolver, "YtDlp", StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed class MediaProviderFactory : IMediaProviderFactory
@@ -130,6 +154,12 @@ public sealed class ProviderResultValidator : IProviderResultValidator
     public ProviderResult Validate(ProviderResult result, IMediaProvider provider)
     {
         if (!result.Success)
+        {
+            return result;
+        }
+
+        // Provider already materialized a local file (yt-dlp path) — skip CDN URL checks.
+        if (!string.IsNullOrWhiteSpace(result.LocalFilePath) && File.Exists(result.LocalFilePath))
         {
             return result;
         }

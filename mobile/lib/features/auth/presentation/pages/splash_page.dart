@@ -1,14 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/router/route_paths.dart';
+import '../../../../core/theme/app_animations.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_gradients.dart';
+import '../../../share/presentation/providers/pending_share_provider.dart';
 import '../providers/auth_providers.dart';
-import '../widgets/app_brand_mark.dart';
+import '../widgets/splash_bottom_panel.dart';
+import '../widgets/splash_brand_block.dart';
 
 /// App entry splash — brand, then session gate (SRS entry before §6.2 Home).
 ///
+/// Presentation is design-locked to the approved Splash mockup.
 /// Uses [CheckAuthStatusUseCase] as a placeholder until real session APIs exist.
 /// Does not perform fake authentication.
 class SplashPage extends ConsumerStatefulWidget {
@@ -19,11 +26,13 @@ class SplashPage extends ConsumerStatefulWidget {
 }
 
 class _SplashPageState extends ConsumerState<SplashPage>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+    with TickerProviderStateMixin {
+  late final AnimationController _entranceController;
+  late final AnimationController _pulseController;
   late final Animation<double> _fade;
   late final Animation<double> _scale;
   late final Animation<Offset> _slide;
+  late final Animation<double> _pulse;
 
   var _isResolvingSession = false;
   var _hasNavigated = false;
@@ -31,18 +40,18 @@ class _SplashPageState extends ConsumerState<SplashPage>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1100),
+      duration: AppAnimations.splashEntrance,
     );
     _fade = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
+      parent: _entranceController,
+      curve: const Interval(0.0, 0.7, curve: AppAnimations.emphasized),
     );
     _scale = Tween<double>(begin: 0.92, end: 1).animate(
       CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.0, 0.75, curve: Curves.easeOutCubic),
+        parent: _entranceController,
+        curve: const Interval(0.0, 0.75, curve: AppAnimations.standard),
       ),
     );
     _slide = Tween<Offset>(
@@ -50,13 +59,22 @@ class _SplashPageState extends ConsumerState<SplashPage>
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.15, 0.85, curve: Curves.easeOutCubic),
+        parent: _entranceController,
+        curve: const Interval(0.15, 0.85, curve: AppAnimations.standard),
       ),
     );
 
-    _controller.forward();
-    _controller.addStatusListener(_onAnimationStatus);
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+    _pulse = CurvedAnimation(
+      parent: _pulseController,
+      curve: Curves.easeInOut,
+    );
+
+    _entranceController.forward();
+    _entranceController.addStatusListener(_onAnimationStatus);
   }
 
   void _onAnimationStatus(AnimationStatus status) {
@@ -71,7 +89,20 @@ class _SplashPageState extends ConsumerState<SplashPage>
     setState(() => _isResolvingSession = true);
 
     // Brief pause so the brand is readable before routing.
-    await Future<void>.delayed(const Duration(milliseconds: 450));
+    await Future<void>.delayed(AppAnimations.splashSessionPause);
+    if (!mounted || _hasNavigated) return;
+
+    // Wait for Android share intake so we do not drop a cold-start URL.
+    try {
+      await ref
+          .read(shareIntentBootstrapProvider)
+          .ready
+          .timeout(const Duration(milliseconds: 1500));
+    } on TimeoutException {
+      // Proceed without share if the platform channel is slow/unavailable.
+    } catch (_) {
+      // Non-Android / tests — continue normally.
+    }
     if (!mounted || _hasNavigated) return;
 
     var isAuthenticated = false;
@@ -85,117 +116,114 @@ class _SplashPageState extends ConsumerState<SplashPage>
     if (!mounted || _hasNavigated) return;
     _hasNavigated = true;
 
-    // Session present → product Home (§6.2). Otherwise → Login (account/session).
-    context.go(isAuthenticated ? RoutePaths.home : RoutePaths.login);
+    final pendingShareUrl = ref.read(pendingShareUrlProvider);
+
+    // Session present → honor pending Android share, else Home (§6.2).
+    // Signed out → Login (pending URL kept for post-login navigation).
+    if (isAuthenticated) {
+      if (pendingShareUrl != null && pendingShareUrl.trim().isNotEmpty) {
+        context.go(shareRouteForUrl(pendingShareUrl.trim()));
+      } else {
+        context.go(RoutePaths.home);
+      }
+    } else {
+      context.go(RoutePaths.login);
+    }
   }
 
   @override
   void dispose() {
-    _controller.removeStatusListener(_onAnimationStatus);
-    _controller.dispose();
+    _entranceController.removeStatusListener(_onAnimationStatus);
+    _entranceController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    final size = MediaQuery.sizeOf(context);
-    final isCompact = size.height < 680;
-
     return Scaffold(
-      backgroundColor: scheme.surface,
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              scheme.primary.withValues(alpha: scheme.brightness == Brightness.light ? 0.10 : 0.18),
-              scheme.surface,
-              scheme.surface,
-            ],
-            stops: const [0.0, 0.45, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: 28,
-              vertical: isCompact ? 20 : 28,
-            ),
+      backgroundColor: AppColors.splashBgDeep,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const _SplashBackground(),
+          SafeArea(
+            bottom: false,
             child: Column(
               children: [
-                const Spacer(flex: 2),
-                FadeTransition(
-                  opacity: _fade,
-                  child: SlideTransition(
-                    position: _slide,
-                    child: ScaleTransition(
-                      scale: _scale,
-                      child: Column(
-                        children: [
-                          AppBrandMark(
-                            size: isCompact ? 76 : 88,
-                            iconSize: isCompact ? 38 : 44,
-                            borderRadius: isCompact ? 24 : 28,
-                          ),
-                          SizedBox(height: isCompact ? 22 : 28),
-                          Text(
-                            AppConstants.appName,
-                            textAlign: TextAlign.center,
-                            style: textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface,
-                              letterSpacing: -0.4,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 320),
-                            child: Text(
-                              'Share a reel from Instagram or Facebook, or paste a link to save it to your library.',
-                              textAlign: TextAlign.center,
-                              style: textTheme.bodyLarge?.copyWith(
-                                color: scheme.onSurface.withValues(alpha: 0.68),
-                                height: 1.45,
-                              ),
-                            ),
-                          ),
-                        ],
+                Expanded(
+                  child: FadeTransition(
+                    opacity: _fade,
+                    child: SlideTransition(
+                      position: _slide,
+                      child: ScaleTransition(
+                        scale: _scale,
+                        child: SplashBrandBlock(pulse: _pulse),
                       ),
                     ),
                   ),
                 ),
-                const Spacer(flex: 3),
-                AnimatedOpacity(
-                  opacity: _isResolvingSession ? 1 : 0,
-                  duration: const Duration(milliseconds: 220),
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: scheme.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        'Checking session…',
-                        style: textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurface.withValues(alpha: 0.55),
-                        ),
-                      ),
-                    ],
-                  ),
+                SplashBottomPanel(
+                  isResolving: _isResolvingSession,
+                  onGetStarted: _resolveEntry,
                 ),
-                SizedBox(height: isCompact ? 12 : 20),
               ],
             ),
           ),
-        ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Layered background matching the mockup (linear wash + radial glows).
+class _SplashBackground extends StatelessWidget {
+  const _SplashBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(gradient: AppGradients.splashBackground),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0, -0.85),
+                radius: 1.05,
+                colors: [
+                  Color(0x662C1A2E),
+                  Color(0x002C1A2E),
+                ],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0.75, 0.95),
+                radius: 0.95,
+                colors: [
+                  Color(0x550F1A2E),
+                  Color(0x000F1A2E),
+                ],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(-0.8, 0.2),
+                radius: 0.7,
+                colors: [
+                  Color(0x2212121B),
+                  Color(0x0012121B),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

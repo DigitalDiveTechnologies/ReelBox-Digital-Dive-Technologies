@@ -6,6 +6,7 @@ abstract final class RouteNames {
   static const String home = 'home';
   static const String library = 'library';
   static const String mediaDetail = 'mediaDetail';
+  static const String mediaPlayer = 'mediaPlayer';
   static const String settings = 'settings';
   static const String share = 'share';
 }

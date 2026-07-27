@@ -25,6 +25,21 @@ public sealed class ProvidersOptions
     public string? AccessToken { get; set; }
 
     /// <summary>
+    /// Active media resolver: <c>YtDlp</c> (public share download) or <c>MetaGraph</c> (official API).
+    /// </summary>
+    public string Resolver { get; set; } = "YtDlp";
+
+    /// <summary>
+    /// yt-dlp executable name or absolute path (must be on PATH in the worker container).
+    /// </summary>
+    public string YtDlpExecutablePath { get; set; } = "yt-dlp";
+
+    /// <summary>
+    /// Hard timeout for a single yt-dlp resolve/download.
+    /// </summary>
+    public int YtDlpTimeoutSeconds { get; set; } = 120;
+
+    /// <summary>
     /// Host suffixes allowed for resolved downloadable media URLs (SRS §16).
     /// </summary>
     public string[] AllowedResolvedHostSuffixes { get; set; } =

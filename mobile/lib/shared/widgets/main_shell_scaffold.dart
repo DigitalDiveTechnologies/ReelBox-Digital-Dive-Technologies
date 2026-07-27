@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/theme/app_colors.dart';
+
 /// Bottom navigation shell for Home / Library / Settings (SRS §7 screens).
 class MainShellScaffold extends StatelessWidget {
   const MainShellScaffold({
@@ -15,6 +17,9 @@ class MainShellScaffold extends StatelessWidget {
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
+        height: 68,
+        backgroundColor: AppColors.splashSheet,
+        indicatorColor: AppColors.brandPurple.withValues(alpha: 0.22),
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: navigationShell.goBranch,
         destinations: const [
@@ -24,13 +29,13 @@ class MainShellScaffold extends StatelessWidget {
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.video_library_outlined),
-            selectedIcon: Icon(Icons.video_library_rounded),
+            icon: Icon(Icons.grid_view_rounded),
+            selectedIcon: Icon(Icons.grid_view_rounded),
             label: 'Library',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
             label: 'Settings',
           ),
         ],

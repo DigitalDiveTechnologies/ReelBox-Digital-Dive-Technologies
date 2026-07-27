@@ -17,5 +17,11 @@ RUN dotnet publish src/SocialReelSaver.Worker/SocialReelSaver.Worker.csproj -c R
 
 FROM mcr.microsoft.com/dotnet/runtime:9.0 AS final
 WORKDIR /app
+# FFmpeg (thumbnails) + yt-dlp (public IG/FB resolve) for the worker pipeline.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl python3 \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod a+rx /usr/local/bin/yt-dlp \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "SocialReelSaver.Worker.dll"]

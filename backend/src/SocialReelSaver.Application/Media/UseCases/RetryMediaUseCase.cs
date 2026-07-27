@@ -51,6 +51,7 @@ public sealed class RetryMediaUseCase
         item.ErrorMessage = null;
         item.ProgressPercent = null;
         item.DownloadStartedAt = null;
+        item.NextRetryAt = null;
         item.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _media.UpdateAsync(item, cancellationToken);

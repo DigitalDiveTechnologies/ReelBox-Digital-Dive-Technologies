@@ -1,4 +1,5 @@
 using SocialReelSaver.Application.Abstractions.Persistence;
+using SocialReelSaver.Application.Abstractions.Playback;
 using SocialReelSaver.Application.Common.Exceptions;
 using SocialReelSaver.Application.Media.DTOs;
 using SocialReelSaver.Application.Media.Mappings;
@@ -8,10 +9,14 @@ namespace SocialReelSaver.Application.Media.UseCases;
 public sealed class GetMediaByIdUseCase
 {
     private readonly IMediaRepository _media;
+    private readonly IMediaThumbnailUrlService _thumbnailUrls;
 
-    public GetMediaByIdUseCase(IMediaRepository media)
+    public GetMediaByIdUseCase(
+        IMediaRepository media,
+        IMediaThumbnailUrlService thumbnailUrls)
     {
         _media = media;
+        _thumbnailUrls = thumbnailUrls;
     }
 
     public async Task<MediaResponse> HandleAsync(
@@ -25,6 +30,7 @@ public sealed class GetMediaByIdUseCase
             throw new NotFoundException("Media item not found.");
         }
 
-        return item.ToResponse();
+        var thumbnailUrl = await _thumbnailUrls.CreateThumbnailUrlAsync(item, cancellationToken);
+        return item.ToResponse(thumbnailUrl: thumbnailUrl);
     }
 }

@@ -1,22 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/app_constants.dart';
+import '../../../../core/errors/app_exception.dart';
 import '../../../../core/router/route_paths.dart';
-import '../widgets/app_brand_mark.dart';
-import '../widgets/auth_text_field.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_gradients.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../share/presentation/providers/pending_share_provider.dart';
+import '../providers/auth_providers.dart';
+import '../widgets/login_brand_mark.dart';
+import '../widgets/login_glass_field.dart';
 
 /// Login screen — account/session entry (SRS §7 / §22).
 ///
-/// Client-side validation only. Sign-in API is a placeholder (no fake auth).
-class LoginPage extends StatefulWidget {
+/// Presentation is design-locked to the approved Login mockup.
+class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  ConsumerState<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -25,6 +31,7 @@ class _LoginPageState extends State<LoginPage> {
 
   var _obscurePassword = true;
   var _submitted = false;
+  var _isSubmitting = false;
 
   @override
   void dispose() {
@@ -73,162 +80,262 @@ class _LoginPageState extends State<LoginPage> {
     final isValid = _formKey.currentState?.validate() ?? false;
     if (!isValid) return;
 
-    // Placeholder only — do not call auth APIs or create a fake session.
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Sign-in will use the backend auth API in a later sprint. No session was created.',
-        ),
-      ),
-    );
+    setState(() => _isSubmitting = true);
+    try {
+      await ref.read(authControllerProvider).login(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+      if (!mounted) return;
+      final pendingShareUrl = ref.read(pendingShareUrlProvider);
+      if (pendingShareUrl != null && pendingShareUrl.trim().isNotEmpty) {
+        context.go(shareRouteForUrl(pendingShareUrl.trim()));
+      } else {
+        context.go(RoutePaths.home);
+      }
+    } on AppException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign-in failed. Please try again.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  void _onSignUp() {
+    context.go(RoutePaths.register);
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    final width = MediaQuery.sizeOf(context).width;
-    final horizontal = width >= 600 ? 32.0 : 24.0;
+    final horizontal = AppSpacing.horizontalInset(context);
+    final topPad = MediaQuery.sizeOf(context).height < 700
+        ? AppSpacing.xl
+        : AppSpacing.huge;
 
     return Scaffold(
-      backgroundColor: scheme.surface,
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              scheme.primary.withValues(
-                alpha: scheme.brightness == Brightness.light ? 0.08 : 0.16,
-              ),
-              scheme.surface,
-              scheme.surface,
-            ],
-            stops: const [0.0, 0.38, 1.0],
+      backgroundColor: AppColors.splashBgDeep,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const DecoratedBox(
+            decoration: BoxDecoration(gradient: AppGradients.splashBackground),
           ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: AutofillGroup(
-                child: Form(
-                  key: _formKey,
-                  autovalidateMode: _submitted
-                      ? AutovalidateMode.onUserInteraction
-                      : AutovalidateMode.disabled,
-                  child: ListView(
-                    padding: EdgeInsets.fromLTRB(horizontal, 28, horizontal, 28),
-                    children: [
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: AppBrandMark(size: 64, iconSize: 32, borderRadius: 20),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0, -0.9),
+                radius: 1.0,
+                colors: [
+                  AppColors.splashBgMahogany.withValues(alpha: 0.55),
+                  AppColors.splashBgMahogany.withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: AutofillGroup(
+                  child: Form(
+                    key: _formKey,
+                    autovalidateMode: _submitted
+                        ? AutovalidateMode.onUserInteraction
+                        : AutovalidateMode.disabled,
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontal,
+                        topPad,
+                        horizontal,
+                        AppSpacing.xxl,
                       ),
-                      const SizedBox(height: 28),
-                      Text(
-                        'Welcome back',
-                        style: textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: scheme.onSurface,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Sign in to ${AppConstants.appName} to save reels and manage your library.',
-                        style: textTheme.bodyLarge?.copyWith(
-                          color: scheme.onSurface.withValues(alpha: 0.68),
-                          height: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      AuthTextField(
-                        controller: _emailController,
-                        focusNode: _emailFocus,
-                        label: 'Email',
-                        hint: 'you@example.com',
-                        prefixIcon: Icons.mail_outline_rounded,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        autofillHints: const [AutofillHints.email],
-                        autocorrect: false,
-                        validator: _validateEmail,
-                        onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
-                      ),
-                      const SizedBox(height: 14),
-                      AuthTextField(
-                        controller: _passwordController,
-                        focusNode: _passwordFocus,
-                        label: 'Password',
-                        prefixIcon: Icons.lock_outline_rounded,
-                        obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.done,
-                        autofillHints: const [AutofillHints.password],
-                        autocorrect: false,
-                        validator: _validatePassword,
-                        onFieldSubmitted: (_) => _onSignIn(),
-                        suffixIcon: IconButton(
-                          tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                          onPressed: () {
-                            setState(() => _obscurePassword = !_obscurePassword);
-                          },
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
+                      children: [
+                        const Center(child: LoginBrandMark()),
+                        const SizedBox(height: AppSpacing.section),
+                        const Text(
+                          'Welcome back',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4,
+                            height: 1.15,
+                            color: AppColors.splashTextPrimary,
                           ),
                         ),
-                      ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: _onForgotPassword,
-                          child: const Text('Forgot password?'),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          'Log in to access your saved reels',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w400,
+                            letterSpacing: 0.1,
+                            height: 1.4,
+                            color: AppColors.splashTextMuted.withValues(alpha: 0.95),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      FilledButton(
-                        onPressed: _onSignIn,
-                        child: const Text('Sign in'),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(child: Divider(color: scheme.outline.withValues(alpha: 0.45))),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              'or',
-                              style: textTheme.labelMedium?.copyWith(
-                                color: scheme.onSurface.withValues(alpha: 0.5),
+                        const SizedBox(height: AppSpacing.section),
+                        LoginGlassField(
+                          controller: _emailController,
+                          focusNode: _emailFocus,
+                          label: 'Email',
+                          hint: 'name@email.com',
+                          prefixIcon: Icons.mail_outline_rounded,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [AutofillHints.email],
+                          autocorrect: false,
+                          validator: _validateEmail,
+                          onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        LoginGlassField(
+                          controller: _passwordController,
+                          focusNode: _passwordFocus,
+                          label: 'Password',
+                          hint: '••••••••',
+                          prefixIcon: Icons.lock_outline_rounded,
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          autofillHints: const [AutofillHints.password],
+                          autocorrect: false,
+                          validator: _validatePassword,
+                          onFieldSubmitted: (_) => _onSignIn(),
+                          suffixIcon: IconButton(
+                            tooltip: _obscurePassword
+                                ? 'Show password'
+                                : 'Hide password',
+                            onPressed: () {
+                              setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              );
+                            },
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              color: AppColors.splashTextMuted,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _onForgotPassword,
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.splashTextMuted,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.xs,
+                                vertical: AppSpacing.xxs,
+                              ),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Forgot password?',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
                               ),
                             ),
                           ),
-                          Expanded(child: Divider(color: scheme.outline.withValues(alpha: 0.45))),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton(
-                        onPressed: () => context.go(RoutePaths.register),
-                        child: const Text('Create account'),
-                      ),
-                      const SizedBox(height: 28),
-                      Text(
-                        'By continuing, you agree to save only content you are authorized to access.',
-                        textAlign: TextAlign.center,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurface.withValues(alpha: 0.5),
-                          height: 1.4,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: AppSpacing.lg),
+                        LoginGradientButton(
+                          label: _isSubmitting ? 'Signing in…' : 'Log in',
+                          onPressed: _isSubmitting ? null : _onSignIn,
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Divider(
+                                color: AppColors.splashChipBorder.withValues(
+                                  alpha: 0.9,
+                                ),
+                                thickness: 1,
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.sm,
+                              ),
+                              child: Text(
+                                'OR',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.8,
+                                  color: AppColors.splashTextMuted.withValues(
+                                    alpha: 0.85,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Divider(
+                                color: AppColors.splashChipBorder.withValues(
+                                  alpha: 0.9,
+                                ),
+                                thickness: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        Center(
+                          child: Text.rich(
+                            TextSpan(
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                color: AppColors.splashTextMuted.withValues(
+                                  alpha: 0.95,
+                                ),
+                              ),
+                              children: [
+                                const TextSpan(text: "Don't have an account? "),
+                                WidgetSpan(
+                                  alignment: PlaceholderAlignment.baseline,
+                                  baseline: TextBaseline.alphabetic,
+                                  child: GestureDetector(
+                                    onTap: _onSignUp,
+                                    child: const Text(
+                                      'Sign up',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        // Instagram pink (not brand purple).
+                                        color: Color(0xFFE1306C),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

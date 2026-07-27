@@ -1,16 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../core/constants/app_constants.dart';
-import '../core/router/app_router.dart';
+import '../core/router/app_router_provider.dart';
 import '../core/theme/app_theme.dart';
-
-final appRouterProvider = Provider<GoRouter>((ref) {
-  final router = createAppRouter();
-  ref.onDispose(router.dispose);
-  return router;
-});
+import '../features/share/presentation/widgets/android_share_intent_listener.dart';
 
 class SocialReelSaverApp extends ConsumerWidget {
   const SocialReelSaverApp({super.key});
@@ -19,13 +13,15 @@ class SocialReelSaverApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(appRouterProvider);
 
-    return MaterialApp.router(
-      title: AppConstants.appName,
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
-      routerConfig: router,
+    return AndroidShareIntentListener(
+      child: MaterialApp.router(
+        title: AppConstants.appName,
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: ThemeMode.system,
+        routerConfig: router,
+      ),
     );
   }
 }

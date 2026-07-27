@@ -33,7 +33,10 @@ public interface IMediaStatusService
         string errorMessage,
         CancellationToken cancellationToken = default);
 
-    Task MarkQueuedAsync(MediaItem item, CancellationToken cancellationToken = default);
+    Task MarkQueuedAsync(
+        MediaItem item,
+        DateTimeOffset? nextRetryAt = null,
+        CancellationToken cancellationToken = default);
 
     Task UpdateProgressAsync(
         MediaItem item,

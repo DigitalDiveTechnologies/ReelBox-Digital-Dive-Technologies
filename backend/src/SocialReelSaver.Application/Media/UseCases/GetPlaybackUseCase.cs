@@ -39,6 +39,7 @@ public sealed class GetPlaybackUseCase
             metadata.MimeType,
             metadata.PlaybackUrl,
             metadata.Delivery,
-            metadata.ExpiresAt);
+            metadata.ExpiresAt,
+            metadata.ThumbnailUrl);
     }
 }

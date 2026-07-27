@@ -1,36 +1,41 @@
-/// Local auth data source placeholder (tokens / session cache).
-///
-/// TODO: Persist access/refresh tokens via secure storage when auth is wired.
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// Local auth data source (JWT access + refresh tokens).
 abstract class AuthLocalDataSource {
-  /// TODO: Read access token from secure storage.
   Future<String?> getAccessToken();
 
-  /// TODO: Read refresh token from secure storage.
   Future<String?> getRefreshToken();
 
-  /// TODO: Persist tokens returned by backend auth API.
   Future<void> saveTokens({
     required String accessToken,
     required String refreshToken,
   });
 
-  /// TODO: Clear all locally stored auth credentials.
   Future<void> clearSession();
 }
 
 class AuthLocalDataSourceImpl implements AuthLocalDataSource {
-  const AuthLocalDataSourceImpl();
+  AuthLocalDataSourceImpl({this._preferences});
+
+  static const _accessKey = 'srs_access_token';
+  static const _refreshKey = 'srs_refresh_token';
+
+  SharedPreferences? _preferences;
+
+  Future<SharedPreferences> _prefs() async {
+    return _preferences ??= await SharedPreferences.getInstance();
+  }
 
   @override
   Future<String?> getAccessToken() async {
-    // TODO: Read from secure storage after backend auth is integrated.
-    return null;
+    final prefs = await _prefs();
+    return prefs.getString(_accessKey);
   }
 
   @override
   Future<String?> getRefreshToken() async {
-    // TODO: Read from secure storage after backend auth is integrated.
-    return null;
+    final prefs = await _prefs();
+    return prefs.getString(_refreshKey);
   }
 
   @override
@@ -38,11 +43,15 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
     required String accessToken,
     required String refreshToken,
   }) async {
-    // TODO: Write tokens from backend auth API into secure storage.
+    final prefs = await _prefs();
+    await prefs.setString(_accessKey, accessToken);
+    await prefs.setString(_refreshKey, refreshToken);
   }
 
   @override
   Future<void> clearSession() async {
-    // TODO: Clear secure storage session after logout API succeeds.
+    final prefs = await _prefs();
+    await prefs.remove(_accessKey);
+    await prefs.remove(_refreshKey);
   }
 }
