@@ -4,6 +4,9 @@ import '../config/app_config.dart';
 ///
 /// The API may return a relative path or a `localhost` base when Docker runs locally;
 /// the phone must use [AppConfig.apiBaseUrl] instead.
+///
+/// Basic-auth credentials embedded in [AppConfig.apiBaseUrl] are never copied into
+/// media URLs (players/caches must not receive host passwords).
 Uri resolveSignedMediaUrl(String raw) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) {
@@ -12,17 +15,23 @@ Uri resolveSignedMediaUrl(String raw) {
 
   var uri = Uri.parse(trimmed);
   final apiBase = Uri.parse(AppConfig.apiBaseUrl);
+  final publicBase = Uri(
+    scheme: apiBase.scheme,
+    host: apiBase.host,
+    port: apiBase.hasPort ? apiBase.port : null,
+  );
 
   if (!uri.hasScheme || uri.host.isEmpty) {
-    uri = apiBase.replace(
+    uri = publicBase.replace(
       path: uri.path.startsWith('/') ? uri.path : '/${uri.path}',
       query: uri.hasQuery ? uri.query : null,
     );
   } else if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
     uri = uri.replace(
-      scheme: apiBase.scheme,
-      host: apiBase.host,
-      port: apiBase.hasPort ? apiBase.port : null,
+      scheme: publicBase.scheme,
+      host: publicBase.host,
+      port: publicBase.hasPort ? publicBase.port : null,
+      userInfo: '',
     );
   }
 

@@ -25,7 +25,7 @@ public sealed class ProvidersOptions
     public string? AccessToken { get; set; }
 
     /// <summary>
-    /// Active media resolver: <c>YtDlp</c> (public share download) or <c>MetaGraph</c> (official API).
+    /// Active media resolver: <c>YtDlp</c>, <c>MetaGraph</c>, or <c>RapidApi</c>.
     /// </summary>
     public string Resolver { get; set; } = "YtDlp";
 

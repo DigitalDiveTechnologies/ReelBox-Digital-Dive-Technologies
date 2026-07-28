@@ -94,6 +94,11 @@ public sealed record ProviderResult
     /// </summary>
     public string? LocalFilePath { get; init; }
 
+    /// <summary>
+    /// Optional remote thumbnail URL returned by a third-party resolver (e.g. RapidAPI <c>thumb</c>).
+    /// </summary>
+    public string? ThumbnailSourceUrl { get; init; }
+
     public string? Title { get; init; }
 
     public string? SuggestedMimeType { get; init; }
@@ -119,11 +124,13 @@ public sealed record ProviderResult
         string? mimeType = null,
         string? extension = null,
         long? durationMs = null,
-        string? localFilePath = null) => new()
+        string? localFilePath = null,
+        string? thumbnailSourceUrl = null) => new()
     {
         Success = true,
         ResolvedSourceUrl = resolvedSourceUrl,
         LocalFilePath = localFilePath,
+        ThumbnailSourceUrl = thumbnailSourceUrl,
         Title = title,
         SuggestedMimeType = mimeType,
         SuggestedExtension = extension,

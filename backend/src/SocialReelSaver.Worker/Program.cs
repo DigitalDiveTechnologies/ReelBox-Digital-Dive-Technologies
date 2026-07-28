@@ -1,6 +1,7 @@
 using Serilog;
 using SocialReelSaver.Application;
 using SocialReelSaver.Infrastructure;
+using SocialReelSaver.Infrastructure.Workers;
 
 try
 {
@@ -15,7 +16,7 @@ try
 
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
-    builder.Services.AddHostedService<SocialReelSaver.Worker.MediaDownloadWorker>();
+    builder.Services.AddHostedService<MediaDownloadWorker>();
 
     var host = builder.Build();
     await host.RunAsync();

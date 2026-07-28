@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
         services.Configure<DownloadOptions>(configuration.GetSection(DownloadOptions.SectionName));
         services.Configure<ProvidersOptions>(configuration.GetSection(ProvidersOptions.SectionName));
+        services.Configure<RapidApiOptions>(configuration.GetSection(RapidApiOptions.SectionName));
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<WorkerOptions>(configuration.GetSection(WorkerOptions.SectionName));
         services.Configure<FfmpegOptions>(configuration.GetSection(FfmpegOptions.SectionName));
@@ -76,8 +77,15 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds) + 5);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("SocialReelSaver/1.0");
         });
+        services.AddHttpClient(RapidApiMediaResolver.HttpClientName, (sp, client) =>
+        {
+            var timeoutSeconds = configuration.GetValue("Providers:TimeoutSeconds", 30);
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds) + 5);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("SocialReelSaver/1.0");
+        });
         services.AddSingleton<MetaGraphMediaResolver>();
         services.AddSingleton<YtDlpMediaResolver>();
+        services.AddSingleton<RapidApiMediaResolver>();
         services.AddSingleton<IMediaProvider, InstagramProvider>();
         services.AddSingleton<IMediaProvider, FacebookProvider>();
         services.AddSingleton<IMediaProviderFactory, MediaProviderFactory>();
@@ -119,17 +127,22 @@ public static class DependencyInjection
         services.AddScoped<IMediaJobPublisher, MediaJobPublisher>();
         services.AddScoped<IMediaJobConsumer, MediaJobConsumer>();
 
-        services
+        var healthChecks = services
             .AddHealthChecks()
             .AddNpgSql(
                 connectionString: databaseConnection,
                 name: "postgresql",
-                tags: ["ready", "db"])
-            .AddRedis(
+                tags: ["ready", "db"]);
+
+        if (!string.IsNullOrWhiteSpace(redisConnection))
+        {
+            healthChecks.AddRedis(
                 redisConnectionString: redisConnection,
                 name: "redis",
-                tags: ["ready", "cache"])
-            .AddCheck<ObjectStorageHealthCheck>("object-storage", tags: ["ready", "storage"]);
+                tags: ["ready", "cache"]);
+        }
+
+        healthChecks.AddCheck<ObjectStorageHealthCheck>("object-storage", tags: ["ready", "storage"]);
 
         return services;
     }
@@ -139,7 +152,8 @@ public static class DependencyInjection
         IConfiguration configuration,
         string redisConnection)
     {
-        var useInMemory = configuration.GetValue("Worker:UseInMemoryQueue", false);
+        var useInMemory = configuration.GetValue("Worker:UseInMemoryQueue", false)
+            || string.IsNullOrWhiteSpace(redisConnection);
         if (useInMemory)
         {
             services.AddSingleton<IMediaJobQueue, InMemoryMediaJobQueue>();

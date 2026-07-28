@@ -62,11 +62,13 @@ public sealed class ProviderFrameworkTests
     public void ResultValidator_RejectsMissingOrInvalidUrl()
     {
         var resolver = CreateResolver(new ProvidersOptions());
-        var validator = new ProviderResultValidator(resolver);
+        var opts = Options.Create(new ProvidersOptions { Resolver = "MetaGraph" });
+        var validator = new ProviderResultValidator(resolver, opts);
         var provider = new InstagramProvider(
             resolver,
-            CreateYtDlp(new ProvidersOptions { Resolver = "MetaGraph" }),
-            Options.Create(new ProvidersOptions { Resolver = "MetaGraph" }));
+            CreateYtDlp(opts.Value),
+            CreateRapidApi(opts.Value),
+            opts);
 
         var missing = validator.Validate(ProviderResult.Ok(" "), provider);
         Assert.False(missing.Success);
@@ -254,7 +256,7 @@ public sealed class ProviderFrameworkTests
         var resolver = CreateResolver(opts.Value);
         return new MediaProviderExecutor(
             new MediaProviderResolver(CreateFactory(providers, options)),
-            new ProviderResultValidator(resolver),
+            new ProviderResultValidator(resolver, opts),
             opts,
             NullLogger<MediaProviderExecutor>.Instance);
     }
@@ -267,8 +269,9 @@ public sealed class ProviderFrameworkTests
         var opts = CloneForMetaGraph(options ?? new ProvidersOptions());
         var meta = CreateResolver(opts, httpHandler);
         var ytDlp = CreateYtDlp(opts);
+        var rapid = CreateRapidApi(opts);
         var o = Options.Create(opts);
-        return [new InstagramProvider(meta, ytDlp, o), new FacebookProvider(meta, ytDlp, o)];
+        return [new InstagramProvider(meta, ytDlp, rapid, o), new FacebookProvider(meta, ytDlp, rapid, o)];
     }
 
     private static ProvidersOptions CloneForMetaGraph(ProvidersOptions source) => new()
@@ -290,6 +293,18 @@ public sealed class ProviderFrameworkTests
             new NoOpTemporaryFileManager(),
             Options.Create(options),
             NullLogger<YtDlpMediaResolver>.Instance);
+
+    private static RapidApiMediaResolver CreateRapidApi(ProvidersOptions options) =>
+        new(
+            new TestHttpClientFactory(new ScriptedHandler(_ =>
+                JsonResponse("""{"download_url":"https://example.com/v.mp4","thumb":"https://example.com/t.jpg","caption":"x"}"""))),
+            Options.Create(new RapidApiOptions
+            {
+                BaseUrl = "https://full-downloader-social-media.p.rapidapi.com",
+                Host = "full-downloader-social-media.p.rapidapi.com",
+                ApiKey = "test-key",
+            }),
+            NullLogger<RapidApiMediaResolver>.Instance);
 
     private static MetaGraphMediaResolver CreateResolver(
         ProvidersOptions options,

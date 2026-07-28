@@ -1,13 +1,15 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SocialReelSaver.Application.Abstractions.Queue;
-using SocialReelSaver.Infrastructure.Workers;
 using SocialReelSaver.Shared.Configuration;
 
-namespace SocialReelSaver.Worker;
+namespace SocialReelSaver.Infrastructure.Workers;
 
 /// <summary>
 /// Background consumer for media download jobs (SRS §11 / §19).
+/// Hosted by the Worker process and/or in-process inside the API (RapidAPI path).
 /// </summary>
 public sealed class MediaDownloadWorker : BackgroundService
 {

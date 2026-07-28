@@ -175,20 +175,50 @@ public sealed class MediaDownloadPipeline
             item.FileSizeBytes = validation.FileSizeBytes;
             item.DurationMs = validation.DurationMs;
 
-            // Thumbnail
+            // Thumbnail — prefer RapidAPI thumb URL; otherwise FFmpeg (best-effort).
             await _status.MarkThumbnailAsync(item, cancellationToken);
-            var thumb = await _thumbnails.GenerateAsync(mediaTempPath, item.Id, cancellationToken);
-            if (thumb.Success && !string.IsNullOrWhiteSpace(thumb.LocalThumbnailPath))
+            if (!string.IsNullOrWhiteSpace(resolution.ThumbnailSourceUrl))
             {
-                thumbnailTempPath = thumb.LocalThumbnailPath;
+                var thumbDownload = await _downloader.DownloadAsync(
+                    new DownloadContext
+                    {
+                        MediaId = item.Id,
+                        JobId = job.JobId,
+                        SourceUrl = resolution.ThumbnailSourceUrl!,
+                        SuggestedFileName = "thumb.jpg",
+                        SuggestedMimeType = "image/jpeg",
+                        Attempt = job.Attempt,
+                    },
+                    cancellationToken);
+
+                if (thumbDownload.Success && !string.IsNullOrWhiteSpace(thumbDownload.LocalFilePath))
+                {
+                    thumbnailTempPath = thumbDownload.LocalFilePath;
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Remote thumbnail skipped for media {MediaId}: {Reason}",
+                        item.Id,
+                        thumbDownload.ErrorMessage ?? "unavailable");
+                }
             }
-            else
+
+            if (string.IsNullOrWhiteSpace(thumbnailTempPath))
             {
-                // FR-010: absence of thumbnail must not block completion.
-                _logger.LogInformation(
-                    "Thumbnail skipped for media {MediaId}: {Reason}",
-                    item.Id,
-                    thumb.ErrorMessage ?? "unavailable");
+                var thumb = await _thumbnails.GenerateAsync(mediaTempPath, item.Id, cancellationToken);
+                if (thumb.Success && !string.IsNullOrWhiteSpace(thumb.LocalThumbnailPath))
+                {
+                    thumbnailTempPath = thumb.LocalThumbnailPath;
+                }
+                else
+                {
+                    // FR-010: absence of thumbnail must not block completion.
+                    _logger.LogInformation(
+                        "Thumbnail skipped for media {MediaId}: {Reason}",
+                        item.Id,
+                        thumb.ErrorMessage ?? "unavailable");
+                }
             }
 
             // Upload
@@ -247,7 +277,7 @@ public sealed class MediaDownloadPipeline
                     {
                         Key = thumbnailKey,
                         Content = thumbStream,
-                        ContentType = thumb.ContentType ?? "image/jpeg",
+                        ContentType = "image/jpeg",
                     },
                     uploadCts.Token);
 

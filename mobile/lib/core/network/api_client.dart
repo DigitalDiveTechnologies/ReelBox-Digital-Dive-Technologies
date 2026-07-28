@@ -31,6 +31,10 @@ typedef TokenSaver = Future<void> Function({
 typedef SessionClearer = Future<void> Function();
 
 /// HTTP implementation of [ApiClient] with Bearer auth + one-shot refresh.
+///
+/// When [AppConfig.apiBaseUrl] embeds IIS Basic Auth (`user:pass@host`), that
+/// Basic header is sent on every request. JWT then uses `X-Access-Token` so it
+/// does not overwrite the Basic `Authorization` header required by the host.
 class HttpApiClient implements ApiClient {
   HttpApiClient({
     http.Client? httpClient,
@@ -39,12 +43,23 @@ class HttpApiClient implements ApiClient {
     required this._readRefreshToken,
     required this._saveTokens,
     required this._clearSession,
-  })  : _http = httpClient ?? http.Client(),
-        _baseUrl =
-            (baseUrl ?? AppConfig.apiBaseUrl).replaceAll(RegExp(r'/$'), '');
+  })  : _http = httpClient ?? http.Client() {
+    final raw =
+        (baseUrl ?? AppConfig.apiBaseUrl).replaceAll(RegExp(r'/$'), '');
+    final parsed = Uri.parse(raw);
+    _basicAuthHeader = parsed.userInfo.isEmpty
+        ? null
+        : 'Basic ${base64Encode(utf8.encode(Uri.decodeComponent(parsed.userInfo)))}';
+    _baseUrl = Uri(
+      scheme: parsed.scheme,
+      host: parsed.host,
+      port: parsed.hasPort ? parsed.port : null,
+    ).toString().replaceAll(RegExp(r'/$'), '');
+  }
 
   final http.Client _http;
-  final String _baseUrl;
+  late final String _baseUrl;
+  late final String? _basicAuthHeader;
   final AccessTokenReader _readAccessToken;
   final RefreshTokenReader _readRefreshToken;
   final TokenSaver _saveTokens;
@@ -107,10 +122,20 @@ class HttpApiClient implements ApiClient {
       if (body != null) 'Content-Type': 'application/json',
     };
 
+    final basic = _basicAuthHeader;
+    if (basic != null) {
+      headers['Authorization'] = basic;
+    }
+
     if (authenticated) {
       final token = await _readAccessToken();
       if (token != null && token.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $token';
+        if (basic != null) {
+          // Host requires Basic; JWT goes in a side-channel header.
+          headers['X-Access-Token'] = token;
+        } else {
+          headers['Authorization'] = 'Bearer $token';
+        }
       }
     }
 
@@ -174,12 +199,14 @@ class HttpApiClient implements ApiClient {
 
     try {
       final uri = Uri.parse('$_baseUrl/api/v1/auth/refresh');
+      final headers = <String, String>{
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        if (_basicAuthHeader != null) 'Authorization': _basicAuthHeader!,
+      };
       final response = await _http.post(
         uri,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
         body: jsonEncode({'refreshToken': refresh}),
       );
 

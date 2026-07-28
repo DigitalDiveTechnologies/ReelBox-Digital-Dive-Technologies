@@ -25,7 +25,7 @@ public static class AuthenticationExtensions
             {
                 var jwtOptions = jwtOptionsAccessor.Value;
 
-                bearerOptions.RequireHttpsMetadata = !environment.IsDevelopment();
+                bearerOptions.RequireHttpsMetadata = false;
                 bearerOptions.SaveToken = true;
                 bearerOptions.MapInboundClaims = false;
                 bearerOptions.TokenValidationParameters = new TokenValidationParameters
@@ -44,6 +44,27 @@ public static class AuthenticationExtensions
 
                 bearerOptions.Events = new JwtBearerEvents
                 {
+                    OnMessageReceived = context =>
+                    {
+                        // Prefer standard Bearer; fall back to X-Access-Token when
+                        // the host already consumes Authorization for IIS Basic Auth.
+                        var header = context.Request.Headers.Authorization.FirstOrDefault();
+                        if (!string.IsNullOrWhiteSpace(header)
+                            && header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                        {
+                            context.Token = header["Bearer ".Length..].Trim();
+                        }
+                        else if (context.Request.Headers.TryGetValue("X-Access-Token", out var values))
+                        {
+                            var token = values.FirstOrDefault();
+                            if (!string.IsNullOrWhiteSpace(token))
+                            {
+                                context.Token = token.Trim();
+                            }
+                        }
+
+                        return Task.CompletedTask;
+                    },
                     OnChallenge = async context =>
                     {
                         context.HandleResponse();
