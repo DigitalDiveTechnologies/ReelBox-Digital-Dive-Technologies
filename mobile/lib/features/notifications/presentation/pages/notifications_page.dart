@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_gradients.dart';
+import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/app_back_button.dart';
 import '../../../../shared/widgets/app_empty_state.dart';
 
 /// In-app notifications list (local / future-ready; no push yet).
+///
+/// Background matches Home / Library dark glassmorphic gradient scheme.
 class NotificationsPage extends StatelessWidget {
   const NotificationsPage({super.key});
 
@@ -24,6 +27,42 @@ class NotificationsPage extends StatelessWidget {
         children: [
           const DecoratedBox(
             decoration: BoxDecoration(gradient: AppGradients.splashBackground),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(-0.85, -0.95),
+                radius: 0.95,
+                colors: [
+                  AppColors.splashBgMahogany.withValues(alpha: 0.5),
+                  AppColors.splashBgMahogany.withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0.9, -0.7),
+                radius: 0.9,
+                colors: [
+                  AppColors.brandPurple.withValues(alpha: 0.18),
+                  AppColors.brandPurple.withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0.6, 0.95),
+                radius: 0.85,
+                colors: [
+                  AppColors.splashBgNavy.withValues(alpha: 0.55),
+                  AppColors.splashBgNavy.withValues(alpha: 0),
+                ],
+              ),
+            ),
           ),
           SafeArea(
             child: Column(
@@ -106,35 +145,40 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.splashSheet.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.splashChipBorder.withValues(alpha: 0.7),
+    return ClipRRect(
+      borderRadius: AppRadius.circularCard,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.splashSheet.withValues(alpha: 0.88),
+          borderRadius: AppRadius.circularCard,
+          border: Border.all(
+            color: AppColors.splashChipBorder.withValues(alpha: 0.65),
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            item.title,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.splashTextPrimary,
-            ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.splashTextPrimary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                item.body,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.splashTextMuted.withValues(alpha: 0.95),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            item.body,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.splashTextMuted.withValues(alpha: 0.95),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

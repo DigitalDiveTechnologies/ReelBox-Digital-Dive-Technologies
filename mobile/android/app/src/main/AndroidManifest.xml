@@ -2,7 +2,7 @@
     <!-- Required for release/debug API access (SRS mobile ↔ backend). -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="Social"
+        android:label="ReelBox"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

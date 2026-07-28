@@ -97,7 +97,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     setState(() => _isSubmitting = true);
     try {
-      await ref.read(authControllerProvider).register(
+      await ref.read(authNotifierProvider.notifier).register(
             email: _emailController.text.trim(),
             password: _passwordController.text,
           );

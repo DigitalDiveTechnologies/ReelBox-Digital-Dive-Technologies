@@ -120,6 +120,10 @@ public static class DependencyInjection
         services.AddHttpClient<IMediaDownloader, MediaDownloader>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, downloadTimeoutSeconds) + 5);
+            // Facebook/IG CDNs often reject bare clients; browser-like UA helps thumb fetches.
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Accept.ParseAdd("image/avif,image/webp,image/apng,image/*,*/*;q=0.8");
         });
 
         RegisterQueue(services, configuration, redisConnection);

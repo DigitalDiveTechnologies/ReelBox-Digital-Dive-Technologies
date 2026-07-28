@@ -7,7 +7,7 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
 
-/// Top bar: brand mark + Social + notification (Home mockup).
+/// Top bar: brand mark + ReelBox + notification (Home mockup).
 class HomeHeaderBar extends StatelessWidget {
   const HomeHeaderBar({
     super.key,

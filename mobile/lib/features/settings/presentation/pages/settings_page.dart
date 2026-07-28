@@ -56,9 +56,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     setState(() => _loggingOut = true);
     try {
-      await ref.read(authControllerProvider).logout();
+      await ref.read(authNotifierProvider.notifier).logout();
       ref.invalidate(mediaListProvider);
-      ref.invalidate(currentUserProvider);
       if (!mounted) return;
       context.go(RoutePaths.login);
     } on AppException catch (error) {
@@ -141,7 +140,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     const _SectionLabel('ACCOUNT'),
                     const SizedBox(height: AppSpacing.sm),
                     _SettingsCard(
-                      child: ref.watch(currentUserProvider).when(
+                      child: ref.watch(authNotifierProvider).when(
                         loading: () => const _AccountRow(
                           title: 'Loading…',
                           subtitle: 'Fetching session',
@@ -152,17 +151,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           subtitle: 'Tap to sign in again',
                           onTap: () => context.go(RoutePaths.login),
                         ),
-                        data: (user) {
-                          final email = user?.email?.trim();
-                          final hasSession =
-                              email != null && email.isNotEmpty;
+                        data: (auth) {
+                          final hasSession = auth.isAuthenticated;
                           final title = hasSession
-                              ? (email.contains('@')
-                                  ? email.split('@').first
-                                  : email)
+                              ? auth.displayName
                               : 'Not signed in';
                           final subtitle = hasSession
-                              ? email
+                              ? auth.displayEmail
                               : 'Sign in to manage your library';
 
                           return _AccountRow(

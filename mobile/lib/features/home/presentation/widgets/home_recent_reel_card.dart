@@ -1,5 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/network/media_url_resolver.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
@@ -39,9 +41,20 @@ class HomeRecentReelCard extends StatelessWidget {
     };
   }
 
+  String? get _resolvedThumbnailUrl {
+    final raw = item.thumbnailUrl?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return resolveSignedMediaUrl(raw).toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isIg = item.platform == MediaPlatform.instagram;
+    final thumbUrl = _resolvedThumbnailUrl;
 
     return Material(
       color: Colors.transparent,
@@ -60,6 +73,24 @@ class HomeRecentReelCard extends StatelessWidget {
           ),
           child: Stack(
             children: [
+              if (thumbUrl != null)
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: AppRadius.circularCard,
+                    child: CachedNetworkImage(
+                      cacheKey: 'thumb-${item.id}',
+                      imageUrl: thumbUrl,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 256,
+                      memCacheHeight: 352,
+                      fadeInDuration: Duration.zero,
+                      fadeOutDuration: Duration.zero,
+                      placeholder: (context, url) => const SizedBox.shrink(),
+                      errorWidget: (context, url, error) =>
+                          const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
               Positioned(
                 top: AppSpacing.sm,
                 left: AppSpacing.sm,

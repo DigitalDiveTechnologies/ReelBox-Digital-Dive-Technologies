@@ -82,7 +82,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     setState(() => _isSubmitting = true);
     try {
-      await ref.read(authControllerProvider).login(
+      await ref.read(authNotifierProvider.notifier).login(
             email: _emailController.text.trim(),
             password: _passwordController.text,
           );

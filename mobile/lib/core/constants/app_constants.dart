@@ -2,6 +2,6 @@
 class AppConstants {
   const AppConstants._();
 
-  /// Confirmed product name (project manager).
-  static const String appName = 'Social';
+  /// Product display name (launcher, headers, MaterialApp title).
+  static const String appName = 'ReelBox';
 }

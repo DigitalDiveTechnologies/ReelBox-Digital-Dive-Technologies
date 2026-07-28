@@ -90,6 +90,19 @@ public sealed class MediaDownloader : IMediaDownloader
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            // Facebook CDN thumbnail hosts often require a social Referer.
+            if (uri.Host.Contains("fbcdn", StringComparison.OrdinalIgnoreCase) ||
+                uri.Host.Contains("fbsbx", StringComparison.OrdinalIgnoreCase) ||
+                uri.Host.Contains("facebook.com", StringComparison.OrdinalIgnoreCase))
+            {
+                request.Headers.TryAddWithoutValidation("Referer", "https://www.facebook.com/");
+            }
+            else if (uri.Host.Contains("cdninstagram", StringComparison.OrdinalIgnoreCase) ||
+                     uri.Host.Contains("instagram.com", StringComparison.OrdinalIgnoreCase))
+            {
+                request.Headers.TryAddWithoutValidation("Referer", "https://www.instagram.com/");
+            }
+
             using var response = await _httpClient.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,

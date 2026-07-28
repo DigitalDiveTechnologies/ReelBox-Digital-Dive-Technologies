@@ -11,9 +11,12 @@ import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/logout_usecase.dart';
 import '../../domain/usecases/register_usecase.dart';
 import '../controllers/auth_controller.dart';
+import '../controllers/auth_notifier.dart';
 
 export '../../../../core/network/api_client_provider.dart'
     show apiClientProvider, authLocalDataSourceProvider;
+export '../controllers/auth_notifier.dart' show authNotifierProvider, AuthNotifier;
+export '../controllers/auth_state.dart' show AuthState;
 
 final authRemoteDataSourceProvider = Provider<AuthRemoteDataSource>((ref) {
   return AuthRemoteDataSourceImpl(ref.watch(apiClientProvider));
@@ -50,6 +53,12 @@ final authControllerProvider = Provider<AuthController>((ref) {
   return AuthController(ref.watch(authRepositoryProvider));
 });
 
+/// Prefer [authNotifierProvider] for UI that needs live session state.
 final currentUserProvider = FutureProvider<AuthUser?>((ref) async {
-  return ref.watch(getCurrentUserUseCaseProvider).call();
+  final authAsync = ref.watch(authNotifierProvider);
+  return authAsync.when(
+    data: (state) => state.user,
+    loading: () => null,
+    error: (_, __) => null,
+  );
 });

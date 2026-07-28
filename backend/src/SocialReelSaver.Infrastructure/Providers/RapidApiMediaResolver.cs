@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SocialReelSaver.Application.Abstractions.Providers;
@@ -20,6 +21,26 @@ public sealed class RapidApiMediaResolver
     {
         PropertyNameCaseInsensitive = true,
     };
+
+    private static readonly string[] ThumbnailPropertyNames =
+    [
+        "thumb",
+        "thumbnail",
+        "thumbnail_url",
+        "thumbnailUrl",
+        "cover",
+        "cover_url",
+        "coverUrl",
+        "picture",
+        "image",
+        "image_url",
+        "imageUrl",
+        "poster",
+        "og_image",
+        "ogImage",
+        "thumbnail_src",
+        "thumbnailSrc",
+    ];
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly RapidApiOptions _options;
@@ -170,8 +191,14 @@ public sealed class RapidApiMediaResolver
             }
 
             var downloadUrl = FirstString(payload, "download_url", "downloadUrl", "url", "video_url", "videoUrl");
-            var thumb = FirstString(payload, "thumb", "thumbnail", "thumbnail_url", "thumbnailUrl", "cover");
             var caption = FirstString(payload, "caption", "title", "description", "text");
+            var thumbUrl = ExtractThumbnailUrl(payload, downloadUrl);
+
+            if (string.IsNullOrWhiteSpace(thumbUrl))
+            {
+                // Facebook payloads often nest picture/thumbnail objects or use alternate keys.
+                thumbUrl = FindFirstImageUrl(payload, excludeUrl: downloadUrl);
+            }
 
             if (string.IsNullOrWhiteSpace(downloadUrl))
             {
@@ -194,12 +221,12 @@ public sealed class RapidApiMediaResolver
                     "RapidAPI returned a non-HTTP(S) download_url.");
             }
 
-            string? thumbUrl = null;
-            if (!string.IsNullOrWhiteSpace(thumb) &&
-                Uri.TryCreate(thumb, UriKind.Absolute, out var thumbUri) &&
-                (thumbUri.Scheme == Uri.UriSchemeHttps || thumbUri.Scheme == Uri.UriSchemeHttp))
+            if (string.IsNullOrWhiteSpace(thumbUrl))
             {
-                thumbUrl = thumbUri.ToString();
+                _logger.LogWarning(
+                    "RapidAPI missing thumbnail for media {MediaId} platform {Platform}",
+                    mediaId,
+                    platform);
             }
 
             return ProviderResult.Ok(
@@ -216,6 +243,178 @@ public sealed class RapidApiMediaResolver
                 ProviderErrorCode.InvalidProviderResponse,
                 "RapidAPI returned invalid JSON.");
         }
+    }
+
+    private static string? ExtractThumbnailUrl(JsonElement payload, string? downloadUrl)
+    {
+        foreach (var name in ThumbnailPropertyNames)
+        {
+            var candidate = CoerceUrlFromProperty(payload, name);
+            var normalized = NormalizeHttpUrl(candidate, excludeUrl: downloadUrl);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                return normalized;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? CoerceUrlFromProperty(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(name, out var prop))
+        {
+            return null;
+        }
+
+        return CoerceUrl(prop);
+    }
+
+    private static string? CoerceUrl(JsonElement prop)
+    {
+        switch (prop.ValueKind)
+        {
+            case JsonValueKind.String:
+                return prop.GetString();
+            case JsonValueKind.Object:
+                return FirstString(prop, "url", "src", "uri", "href", "link", "secure_url", "secureUrl")
+                    ?? CoerceUrlFromProperty(prop, "image")
+                    ?? CoerceUrlFromProperty(prop, "thumbnail");
+            case JsonValueKind.Array:
+                foreach (var item in prop.EnumerateArray())
+                {
+                    var nested = CoerceUrl(item);
+                    if (!string.IsNullOrWhiteSpace(nested))
+                    {
+                        return nested;
+                    }
+                }
+
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    private static string? FindFirstImageUrl(JsonElement element, string? excludeUrl, int depth = 0)
+    {
+        if (depth > 6)
+        {
+            return null;
+        }
+
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.String:
+                return NormalizeHttpUrl(element.GetString(), excludeUrl, preferImage: true);
+            case JsonValueKind.Object:
+                foreach (var name in ThumbnailPropertyNames)
+                {
+                    if (!element.TryGetProperty(name, out var named))
+                    {
+                        continue;
+                    }
+
+                    var fromNamed = FindFirstImageUrl(named, excludeUrl, depth + 1);
+                    if (!string.IsNullOrWhiteSpace(fromNamed))
+                    {
+                        return fromNamed;
+                    }
+                }
+
+                foreach (var property in element.EnumerateObject())
+                {
+                    var nested = FindFirstImageUrl(property.Value, excludeUrl, depth + 1);
+                    if (!string.IsNullOrWhiteSpace(nested))
+                    {
+                        return nested;
+                    }
+                }
+
+                return null;
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    var nested = FindFirstImageUrl(item, excludeUrl, depth + 1);
+                    if (!string.IsNullOrWhiteSpace(nested))
+                    {
+                        return nested;
+                    }
+                }
+
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    private static string? NormalizeHttpUrl(string? raw, string? excludeUrl, bool preferImage = false)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var cleaned = UnescapeUrl(raw.Trim());
+        if (!Uri.TryCreate(cleaned, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(excludeUrl) &&
+            string.Equals(uri.ToString(), excludeUrl.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        // Never treat the MP4 download URL as a thumbnail.
+        if (LooksLikeVideoUrl(uri))
+        {
+            return null;
+        }
+
+        if (preferImage && !LooksLikeImageUrl(uri) && !LooksLikeCdnThumbHost(uri))
+        {
+            return null;
+        }
+
+        return uri.ToString();
+    }
+
+    private static bool LooksLikeVideoUrl(Uri uri)
+    {
+        var path = uri.AbsolutePath;
+        return path.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".mov", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".webm", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikeImageUrl(Uri uri)
+    {
+        var path = uri.AbsolutePath;
+        return path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikeCdnThumbHost(Uri uri)
+    {
+        var host = uri.Host;
+        return host.Contains("fbcdn", StringComparison.OrdinalIgnoreCase)
+            || host.Contains("cdninstagram", StringComparison.OrdinalIgnoreCase)
+            || host.Contains("fbsbx", StringComparison.OrdinalIgnoreCase)
+            || host.Contains("scontent", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string UnescapeUrl(string value)
+    {
+        var unescaped = System.Net.WebUtility.HtmlDecode(value);
+        return Regex.Replace(unescaped, @"\\/", "/");
     }
 
     private static ProviderErrorCode MapClientError(HttpStatusCode status) =>

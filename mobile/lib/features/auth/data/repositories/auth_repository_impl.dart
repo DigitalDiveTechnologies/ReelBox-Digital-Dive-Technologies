@@ -22,15 +22,33 @@ class AuthRepositoryImpl implements AuthRepository {
 
     try {
       final model = await remoteDataSource.getCurrentUser();
-      return model?.toDomain();
+      final user = model?.toDomain();
+      if (user != null) {
+        await localDataSource.saveCachedUser(id: user.id, email: user.email);
+        return user;
+      }
     } catch (_) {
       final refreshed = await _refreshIfPossible();
-      if (!refreshed) {
-        return null;
+      if (refreshed) {
+        try {
+          final model = await remoteDataSource.getCurrentUser();
+          final user = model?.toDomain();
+          if (user != null) {
+            await localDataSource.saveCachedUser(id: user.id, email: user.email);
+            return user;
+          }
+        } catch (_) {
+          // Fall through to local cache.
+        }
       }
-      final model = await remoteDataSource.getCurrentUser();
-      return model?.toDomain();
     }
+
+    final cached = await localDataSource.getCachedUser();
+    if (cached != null) {
+      return AuthUser(id: cached.id, email: cached.email);
+    }
+
+    return null;
   }
 
   @override
@@ -46,7 +64,9 @@ class AuthRepositoryImpl implements AuthRepository {
       accessToken: session.tokens.accessToken,
       refreshToken: session.tokens.refreshToken,
     );
-    return session.user.toDomain();
+    final user = session.user.toDomain();
+    await localDataSource.saveCachedUser(id: user.id, email: user.email);
+    return user;
   }
 
   @override
@@ -62,7 +82,9 @@ class AuthRepositoryImpl implements AuthRepository {
       accessToken: session.tokens.accessToken,
       refreshToken: session.tokens.refreshToken,
     );
-    return session.user.toDomain();
+    final user = session.user.toDomain();
+    await localDataSource.saveCachedUser(id: user.id, email: user.email);
+    return user;
   }
 
   @override
@@ -97,6 +119,8 @@ class AuthRepositoryImpl implements AuthRepository {
         accessToken: session.tokens.accessToken,
         refreshToken: session.tokens.refreshToken,
       );
+      final user = session.user.toDomain();
+      await localDataSource.saveCachedUser(id: user.id, email: user.email);
       return true;
     } catch (_) {
       await localDataSource.clearSession();

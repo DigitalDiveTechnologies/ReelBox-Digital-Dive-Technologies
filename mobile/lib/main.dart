@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
 import 'app/bootstrap.dart';
+import 'core/constants/app_constants.dart';
 import 'core/router/app_router_provider.dart';
 import 'features/share/data/datasources/android_share_intent_registrar.dart';
 
@@ -26,7 +27,13 @@ Future<void> main() async {
       overrides: [
         initialRouteProvider.overrideWithValue(boot.initialLocation),
       ],
+      // ReelBox — MaterialApp title comes from [AppConstants.appName].
       child: const SocialReelSaverApp(),
     ),
   );
+
+  assert(() {
+    debugPrint('Starting ${AppConstants.appName}');
+    return true;
+  }());
 }
