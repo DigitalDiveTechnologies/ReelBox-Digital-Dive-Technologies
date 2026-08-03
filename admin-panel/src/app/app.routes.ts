@@ -18,6 +18,13 @@ export const routes: Routes = [
             (m) => m.LoginPageComponent,
           ),
       },
+      {
+        path: 'forgot-password',
+        loadComponent: () =>
+          import('./features/auth/forgot-password/forgot-password-page.component').then(
+            (m) => m.ForgotPasswordPageComponent,
+          ),
+      },
     ],
   },
   {

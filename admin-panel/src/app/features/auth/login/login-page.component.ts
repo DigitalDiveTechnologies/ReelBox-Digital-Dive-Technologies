@@ -1,13 +1,13 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { TokenService } from '../../../core/auth/session/token.service';
 
 @Component({
   selector: 'app-login-page',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, RouterLink],
   template: `
     <form class="form" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
       <h1>Sign in</h1>
@@ -48,10 +48,13 @@ import { TokenService } from '../../../core/auth/session/token.service';
         }
       </label>
 
-      <label class="remember">
-        <input type="checkbox" formControlName="rememberMe" />
-        <span>Remember me</span>
-      </label>
+      <div class="row-between">
+        <label class="remember">
+          <input type="checkbox" formControlName="rememberMe" />
+          <span>Remember me</span>
+        </label>
+        <a class="forgot" routerLink="/auth/forgot-password">Forgot Password?</a>
+      </div>
 
       <button type="submit" class="cta" [disabled]="loading() || form.invalid">
         {{ loading() ? 'Signing in…' : 'Sign in' }}
@@ -122,11 +125,23 @@ import { TokenService } from '../../../core/auth/session/token.service';
       small {
         color: var(--status-fail);
       }
+      .row-between {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+      }
       .remember {
         flex-direction: row;
         align-items: center;
         gap: 0.55rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0;
+      }
+      .forgot {
+        font-size: 0.82rem;
+        color: var(--ig-pink, #dd2a7b);
+        white-space: nowrap;
       }
       .cta {
         width: 100%;

@@ -27,6 +27,8 @@ public static class DependencyInjection
         services.AddScoped<RefreshAdminTokenUseCase>();
         services.AddScoped<LogoutAdminUseCase>();
         services.AddScoped<GetCurrentAdminUseCase>();
+        services.AddScoped<ForgotAdminPasswordUseCase>();
+        services.AddScoped<ResetAdminPasswordUseCase>();
 
         services.AddScoped<GetDashboardSummaryUseCase>();
         services.AddScoped<GetDashboardTrendsUseCase>();

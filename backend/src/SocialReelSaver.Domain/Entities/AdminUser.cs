@@ -21,6 +21,11 @@ public sealed class AdminUser
 
     public DateTimeOffset? RefreshTokenExpiresAt { get; set; }
 
+    /// <summary>Hashed 6-digit password-reset OTP (cleared after use / expiry).</summary>
+    public string? PasswordResetOtpHash { get; set; }
+
+    public DateTimeOffset? PasswordResetOtpExpiresAt { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; }

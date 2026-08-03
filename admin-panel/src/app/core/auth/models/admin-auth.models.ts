@@ -1,8 +1,22 @@
-/** Typed contracts for PDF §9.2 Admin Auth APIs. Backend not implemented yet. */
+/** Typed contracts for Admin Auth APIs. */
 
 export interface AdminLoginRequest {
   email: string;
   password: string;
+}
+
+export interface AdminForgotPasswordRequest {
+  email: string;
+}
+
+export interface AdminResetPasswordRequest {
+  email: string;
+  otp: string;
+  newPassword: string;
+}
+
+export interface AdminMessageResponse {
+  message: string;
 }
 
 export interface AdminTokens {
@@ -28,13 +42,11 @@ export interface AdminRefreshRequest {
   refreshToken: string;
 }
 
-/**
- * Expected Admin Auth routes (PDF).
- * TODO(backend): implement these under ASP.NET `/api/admin` without changing mobile `/api/v1/auth`.
- */
 export const AdminAuthEndpoints = {
   login: '/admin/auth/login',
   refresh: '/admin/auth/refresh',
   logout: '/admin/auth/logout',
   me: '/admin/auth/me',
+  forgotPassword: '/admin/auth/forgot-password',
+  resetPassword: '/admin/auth/reset-password',
 } as const;

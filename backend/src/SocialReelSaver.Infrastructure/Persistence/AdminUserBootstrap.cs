@@ -35,7 +35,22 @@ public static class AdminUserBootstrap
         }
 
         var admins = scope.ServiceProvider.GetRequiredService<IAdminUserRepository>();
-        if (await admins.AnyAsync(cancellationToken))
+        var targetEmail = options.Email.Trim().ToLowerInvariant();
+        var existing = await admins.GetByEmailAsync(targetEmail, cancellationToken);
+        if (existing is null)
+        {
+            var oldLocal = await admins.GetByEmailAsync("admin@reelbox.local", cancellationToken);
+            if (oldLocal is not null)
+            {
+                oldLocal.Email = targetEmail;
+                oldLocal.UpdatedAt = DateTimeOffset.UtcNow;
+                await admins.UpdateAsync(oldLocal, cancellationToken);
+                await admins.SaveChangesAsync(cancellationToken);
+                logger.LogInformation("Updated bootstrap SuperAdmin email to {Email}", targetEmail);
+                return;
+            }
+        }
+        else
         {
             return;
         }

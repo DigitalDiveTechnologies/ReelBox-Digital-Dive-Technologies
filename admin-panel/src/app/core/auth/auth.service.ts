@@ -14,9 +14,12 @@ import { publicRuntimeConfig } from '../config/public-runtime.config';
 import {
   AdminAuthEndpoints,
   AdminAuthResponse,
+  AdminForgotPasswordRequest,
   AdminLoginRequest,
+  AdminMessageResponse,
   AdminProfile,
   AdminRefreshRequest,
+  AdminResetPasswordRequest,
 } from './models/admin-auth.models';
 import { SessionService } from './session/session.service';
 import { TokenService } from './session/token.service';
@@ -34,6 +37,18 @@ export class AuthService {
     return this.postAuth<AdminAuthResponse>(AdminAuthEndpoints.login, request).pipe(
       tap((response) => this.applyAuthResponse(response, rememberMe)),
       map((response) => response.admin),
+      catchError((error: unknown) => throwError(() => this.toAuthError(error))),
+    );
+  }
+
+  forgotPassword(request: AdminForgotPasswordRequest): Observable<AdminMessageResponse> {
+    return this.postAuth<AdminMessageResponse>(AdminAuthEndpoints.forgotPassword, request).pipe(
+      catchError((error: unknown) => throwError(() => this.toAuthError(error))),
+    );
+  }
+
+  resetPassword(request: AdminResetPasswordRequest): Observable<AdminMessageResponse> {
+    return this.postAuth<AdminMessageResponse>(AdminAuthEndpoints.resetPassword, request).pipe(
       catchError((error: unknown) => throwError(() => this.toAuthError(error))),
     );
   }
@@ -164,7 +179,10 @@ export class AuthService {
         );
       }
       if (error.status === 401) {
-        return new Error('Invalid email or password.');
+        const problem = error.error as { title?: string; detail?: string; message?: string } | null;
+        return new Error(
+          problem?.detail ?? problem?.title ?? problem?.message ?? 'Invalid email or password.',
+        );
       }
       if (error.status === 403) {
         return new Error('You do not have permission to access the admin portal.');

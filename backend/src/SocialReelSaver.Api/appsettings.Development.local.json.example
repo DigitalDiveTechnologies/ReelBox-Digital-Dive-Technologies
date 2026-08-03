@@ -15,5 +15,15 @@
   },
   "AdminJwt": {
     "SigningKey": "REPLACE_WITH_LONG_RANDOM_ADMIN_JWT_SIGNING_KEY"
+  },
+  "Smtp": {
+    "Host": "chocobo.mxrouting.net",
+    "Port": 587,
+    "Username": "support.reelbox@digitaldive.net",
+    "Password": "YOUR_SMTP_PASSWORD",
+    "EnableSsl": true,
+    "FromEmail": "support.reelbox@digitaldive.net",
+    "FromName": "ReelBox Support",
+    "ResetNotifyEmail": "support.reelbox@digitaldive.net"
   }
 }

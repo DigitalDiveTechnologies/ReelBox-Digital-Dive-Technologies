@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using SocialReelSaver.Application.Abstractions.Authentication;
 using SocialReelSaver.Application.Abstractions.Admin;
 using SocialReelSaver.Application.Abstractions.Downloading;
+using SocialReelSaver.Application.Abstractions.Email;
 using SocialReelSaver.Application.Abstractions.Media;
 using SocialReelSaver.Application.Abstractions.Persistence;
 using SocialReelSaver.Application.Abstractions.Playback;
@@ -22,6 +23,7 @@ using SocialReelSaver.Infrastructure.Playback;
 using SocialReelSaver.Infrastructure.Providers;
 using SocialReelSaver.Infrastructure.Queue;
 using SocialReelSaver.Infrastructure.Storage;
+using SocialReelSaver.Infrastructure.Email;
 using SocialReelSaver.Infrastructure.Workers;
 using SocialReelSaver.Shared.Configuration;
 using StackExchange.Redis;
@@ -43,6 +45,7 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<AdminJwtOptions>(configuration.GetSection(AdminJwtOptions.SectionName));
         services.Configure<AdminBootstrapOptions>(configuration.GetSection(AdminBootstrapOptions.SectionName));
+        services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
         services.Configure<WorkerOptions>(configuration.GetSection(WorkerOptions.SectionName));
         services.Configure<FfmpegOptions>(configuration.GetSection(FfmpegOptions.SectionName));
 
@@ -83,6 +86,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminRefreshTokenService, AdminRefreshTokenService>();
         services.AddScoped<IUserAuthenticationService, UserAuthenticationService>();
         services.AddScoped<IAdminAuthenticationService, AdminAuthenticationService>();
+        services.AddSingleton<IEmailService, SmtpEmailService>();
 
         services.AddScoped<IMediaStatusService, MediaStatusService>();
         services.AddSingleton<IRetryPolicy, ExponentialBackoffRetryPolicy>();
