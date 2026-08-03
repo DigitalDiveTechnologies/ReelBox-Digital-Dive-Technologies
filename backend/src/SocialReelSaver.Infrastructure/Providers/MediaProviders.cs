@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SocialReelSaver.Application.Abstractions.Admin;
 using SocialReelSaver.Application.Abstractions.Providers;
 using SocialReelSaver.Domain.Enums;
 using SocialReelSaver.Shared.Configuration;
@@ -110,13 +111,16 @@ public sealed class MediaProviderFactory : IMediaProviderFactory
 {
     private readonly IReadOnlyDictionary<MediaPlatform, IMediaProvider> _providers;
     private readonly ProvidersOptions _options;
+    private readonly IOperationalSettings _operational;
 
     public MediaProviderFactory(
         IEnumerable<IMediaProvider> providers,
-        IOptions<ProvidersOptions> options)
+        IOptions<ProvidersOptions> options,
+        IOperationalSettings operational)
     {
         _providers = providers.ToDictionary(p => p.Platform);
         _options = options.Value;
+        _operational = operational;
     }
 
     public IMediaProvider Create(MediaPlatform platform)
@@ -149,8 +153,38 @@ public sealed class MediaProviderFactory : IMediaProviderFactory
         return true;
     }
 
-    private bool IsEnabled(MediaPlatform platform) =>
-        GetPlatformOptions(platform).Enabled;
+    private bool IsEnabled(MediaPlatform platform)
+    {
+        // Best-effort load; factory is singleton and must not block forever.
+        _ = _operational.EnsureLoadedAsync();
+
+        if (_operational.GetBool(OperationalSettingKeys.PlatformMaintenanceMode, false)
+            || _operational.GetBool(OperationalSettingKeys.SettingsMaintenanceMode, false))
+        {
+            return false;
+        }
+
+        var configEnabled = GetPlatformOptions(platform).Enabled;
+        var key = platform switch
+        {
+            MediaPlatform.Instagram => OperationalSettingKeys.PlatformInstagramEnabled,
+            MediaPlatform.Facebook => OperationalSettingKeys.PlatformFacebookEnabled,
+            _ => null,
+        };
+
+        if (key is null) return false;
+
+        var providerEnabledKey = platform switch
+        {
+            MediaPlatform.Instagram => OperationalSettingKeys.ProviderInstagramEnabled,
+            MediaPlatform.Facebook => OperationalSettingKeys.ProviderFacebookEnabled,
+            _ => null,
+        };
+
+        var platformEnabled = _operational.GetBool(key, configEnabled);
+        var providerEnabled = providerEnabledKey is null || _operational.GetBool(providerEnabledKey, true);
+        return platformEnabled && providerEnabled;
+    }
 
     internal ProviderPlatformOptions GetPlatformOptions(MediaPlatform platform) =>
         platform switch
@@ -239,17 +273,20 @@ public sealed class MediaProviderExecutor : IMediaProviderExecutor
     private readonly IMediaProviderResolver _resolver;
     private readonly IProviderResultValidator _resultValidator;
     private readonly ProvidersOptions _options;
+    private readonly IOperationalSettings _operational;
     private readonly ILogger<MediaProviderExecutor> _logger;
 
     public MediaProviderExecutor(
         IMediaProviderResolver resolver,
         IProviderResultValidator resultValidator,
         IOptions<ProvidersOptions> options,
+        IOperationalSettings operational,
         ILogger<MediaProviderExecutor> logger)
     {
         _resolver = resolver;
         _resultValidator = resultValidator;
         _options = options.Value;
+        _operational = operational;
         _logger = logger;
     }
 
@@ -293,7 +330,9 @@ public sealed class MediaProviderExecutor : IMediaProviderExecutor
             context.CorrelationId,
             context.Attempt);
 
-        var timeoutSeconds = Math.Max(1, Math.Min(_options.TimeoutSeconds, _options.MaximumExecutionSeconds));
+        _ = _operational.EnsureLoadedAsync();
+        var configuredTimeout = _operational.GetInt(OperationalSettingKeys.ProviderTimeoutSeconds, _options.TimeoutSeconds);
+        var timeoutSeconds = Math.Max(1, Math.Min(configuredTimeout, _options.MaximumExecutionSeconds));
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
@@ -393,9 +432,21 @@ public sealed class MediaProviderExecutor : IMediaProviderExecutor
         };
     }
 
-    private bool IsConfiguredButDisabled(MediaPlatform platform) =>
-        platform is MediaPlatform.Instagram or MediaPlatform.Facebook
-        && !GetPlatformOptions(platform).Enabled;
+    private bool IsConfiguredButDisabled(MediaPlatform platform)
+    {
+        if (platform is not (MediaPlatform.Instagram or MediaPlatform.Facebook))
+            return false;
+
+        _ = _operational.EnsureLoadedAsync();
+        if (_operational.GetBool(OperationalSettingKeys.PlatformMaintenanceMode, false)
+            || _operational.GetBool(OperationalSettingKeys.SettingsMaintenanceMode, false))
+            return true;
+
+        var key = platform == MediaPlatform.Instagram
+            ? OperationalSettingKeys.PlatformInstagramEnabled
+            : OperationalSettingKeys.PlatformFacebookEnabled;
+        return !_operational.GetBool(key, GetPlatformOptions(platform).Enabled);
+    }
 
     private ProviderPlatformOptions GetPlatformOptions(MediaPlatform platform) =>
         platform switch

@@ -17,6 +17,7 @@ using SocialReelSaver.Infrastructure.Queue;
 using SocialReelSaver.Infrastructure.Storage;
 using SocialReelSaver.Infrastructure.Workers;
 using SocialReelSaver.Shared.Configuration;
+using SocialReelSaver.Tests;
 
 namespace SocialReelSaver.Tests.Worker;
 
@@ -253,7 +254,8 @@ public sealed class MediaDownloadPipelineTests
         ProvidersOptions? options = null)
     {
         var opts = Options.Create(options ?? new ProvidersOptions());
-        var factory = new MediaProviderFactory(providers, opts);
+        var operational = new TestOperationalSettings();
+        var factory = new MediaProviderFactory(providers, opts, operational);
         var resolver = new MediaProviderResolver(factory);
         var meta = new MetaGraphMediaResolver(
             new TestHttpClientFactory(new ScriptedHandler(_ =>
@@ -267,6 +269,7 @@ public sealed class MediaDownloadPipelineTests
             resolver,
             new ProviderResultValidator(meta, opts),
             opts,
+            operational,
             NullLogger<MediaProviderExecutor>.Instance);
     }
 
@@ -406,6 +409,9 @@ public sealed class MediaDownloadPipelineTests
         public Task<MediaItem?> GetByIdAsync(Guid mediaId, CancellationToken cancellationToken = default) =>
             Task.FromResult<MediaItem?>(_item.Id == mediaId ? _item : null);
 
+        public Task<MediaItem?> GetByIdWithUserAsync(Guid mediaId, CancellationToken cancellationToken = default) =>
+            GetByIdAsync(mediaId, cancellationToken);
+
         public Task<MediaItem?> GetByIdForUserAsync(Guid mediaId, Guid userId, CancellationToken cancellationToken = default) =>
             Task.FromResult<MediaItem?>(_item.Id == mediaId && _item.UserId == userId ? _item : null);
 
@@ -420,6 +426,22 @@ public sealed class MediaDownloadPipelineTests
             MediaPlatform? platform,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<(IReadOnlyList<MediaItem>, int)>((Array.Empty<MediaItem>(), 0));
+
+        public Task<(IReadOnlyList<MediaItem> Items, int TotalCount)> ListAdminAsync(
+            int page, int pageSize, string? search, MediaStatus? status, MediaPlatform? platform,
+            Guid? userId, IReadOnlyList<MediaStatus>? statusIn, string? sortBy = null, string? sortDir = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<(IReadOnlyList<MediaItem>, int)>((Array.Empty<MediaItem>(), 0));
+
+        public Task<IReadOnlyDictionary<MediaStatus, int>> StatusCountsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<MediaStatus, int>>(new Dictionary<MediaStatus, int>());
+
+        public Task<long> SumFileSizeBytesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(0L);
+
+        public Task<IReadOnlyList<(string? MediaStorageKey, string? ThumbnailStorageKey)>> ListStorageKeysAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<(string?, string?)>>([]);
 
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 

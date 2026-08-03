@@ -1,0 +1,19 @@
+{
+  "_comment": "Copy to appsettings.Development.local.json (gitignored) for machine-specific secrets. Never commit real production keys.",
+  "ConnectionStrings": {
+    "PostgreSQL": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;Ssl Mode=Require;Trust Server Certificate=true;",
+    "Redis": "localhost:6379"
+  },
+  "Database": {
+    "ConnectionString": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;Ssl Mode=Require;Trust Server Certificate=true;"
+  },
+  "RapidApi": {
+    "ApiKey": "YOUR_RAPIDAPI_KEY"
+  },
+  "Jwt": {
+    "SigningKey": "REPLACE_WITH_LONG_RANDOM_MOBILE_JWT_SIGNING_KEY"
+  },
+  "AdminJwt": {
+    "SigningKey": "REPLACE_WITH_LONG_RANDOM_ADMIN_JWT_SIGNING_KEY"
+  }
+}

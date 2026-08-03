@@ -3,6 +3,7 @@
   <PropertyGroup>
     <RootNamespace>SocialReelSaver.Api</RootNamespace>
     <AssemblyName>SocialReelSaver.Api</AssemblyName>
+    <UserSecretsId>social-reel-saver-api</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

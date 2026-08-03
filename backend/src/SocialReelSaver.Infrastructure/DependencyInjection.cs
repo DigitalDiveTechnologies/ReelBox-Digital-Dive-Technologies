@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using SocialReelSaver.Application.Abstractions.Authentication;
+using SocialReelSaver.Application.Abstractions.Admin;
 using SocialReelSaver.Application.Abstractions.Downloading;
 using SocialReelSaver.Application.Abstractions.Media;
 using SocialReelSaver.Application.Abstractions.Persistence;
@@ -11,6 +12,7 @@ using SocialReelSaver.Application.Abstractions.Providers;
 using SocialReelSaver.Application.Abstractions.Queue;
 using SocialReelSaver.Application.Abstractions.Storage;
 using SocialReelSaver.Application.Media.Retry;
+using SocialReelSaver.Infrastructure.Admin;
 using SocialReelSaver.Infrastructure.Authentication;
 using SocialReelSaver.Infrastructure.Downloading;
 using SocialReelSaver.Infrastructure.Media;
@@ -39,6 +41,8 @@ public static class DependencyInjection
         services.Configure<ProvidersOptions>(configuration.GetSection(ProvidersOptions.SectionName));
         services.Configure<RapidApiOptions>(configuration.GetSection(RapidApiOptions.SectionName));
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.Configure<AdminJwtOptions>(configuration.GetSection(AdminJwtOptions.SectionName));
+        services.Configure<AdminBootstrapOptions>(configuration.GetSection(AdminBootstrapOptions.SectionName));
         services.Configure<WorkerOptions>(configuration.GetSection(WorkerOptions.SectionName));
         services.Configure<FfmpegOptions>(configuration.GetSection(FfmpegOptions.SectionName));
 
@@ -61,11 +65,24 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IAdminUserRepository, AdminUserRepository>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IAuditLogWriter, AuditLogWriter>();
+        services.AddScoped<IAdminMetricsReader, AdminMetricsReader>();
         services.AddScoped<IMediaRepository, MediaRepository>();
+        services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();
+        services.AddScoped<IAppErrorLogRepository, AppErrorLogRepository>();
+        services.AddScoped<IAppErrorLogWriter, AppErrorLogWriter>();
+        services.AddSingleton<IOperationalSettings, OperationalSettings>();
+        services.AddScoped<IAdminStorageScanner, AdminStorageScanner>();
+        services.AddScoped<IAdminHealthProbe, AdminHealthProbe>();
         services.AddSingleton<IPasswordHasher, PasswordHasherService>();
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
+        services.AddSingleton<IAdminJwtTokenService, AdminJwtTokenService>();
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<IAdminRefreshTokenService, AdminRefreshTokenService>();
         services.AddScoped<IUserAuthenticationService, UserAuthenticationService>();
+        services.AddScoped<IAdminAuthenticationService, AdminAuthenticationService>();
 
         services.AddScoped<IMediaStatusService, MediaStatusService>();
         services.AddSingleton<IRetryPolicy, ExponentialBackoffRetryPolicy>();

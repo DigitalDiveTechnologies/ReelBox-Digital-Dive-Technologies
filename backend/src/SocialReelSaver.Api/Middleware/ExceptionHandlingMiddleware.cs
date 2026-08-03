@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentValidation;
+using SocialReelSaver.Application.Abstractions.Admin;
 using SocialReelSaver.Application.Common.Exceptions;
 
 namespace SocialReelSaver.Api.Middleware;
@@ -43,6 +44,7 @@ public sealed class ExceptionHandlingMiddleware
         if (status >= StatusCodes.Status500InternalServerError)
         {
             _logger.LogError(exception, "Unhandled exception");
+            await TryPersistErrorAsync(context, exception, status);
         }
         else
         {
@@ -81,5 +83,27 @@ public sealed class ExceptionHandlingMiddleware
         };
 
         await context.Response.WriteAsync(JsonSerializer.Serialize(body));
+    }
+
+    private static async Task TryPersistErrorAsync(HttpContext context, Exception exception, int status)
+    {
+        try
+        {
+            var writer = context.RequestServices.GetService<IAppErrorLogWriter>();
+            if (writer is null) return;
+
+            await writer.WriteAsync(
+                "Error",
+                exception.Message,
+                exception.ToString(),
+                exception.GetType().FullName,
+                context.TraceIdentifier,
+                context.Request.Path.Value,
+                status);
+        }
+        catch
+        {
+            // Never let error persistence break the response path.
+        }
     }
 }

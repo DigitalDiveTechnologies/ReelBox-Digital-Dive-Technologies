@@ -5,6 +5,7 @@ using SocialReelSaver.Application.Abstractions.Providers;
 using SocialReelSaver.Domain.Enums;
 using SocialReelSaver.Infrastructure.Providers;
 using SocialReelSaver.Shared.Configuration;
+using SocialReelSaver.Tests;
 
 namespace SocialReelSaver.Tests.Worker;
 
@@ -246,18 +247,20 @@ public sealed class ProviderFrameworkTests
     private static MediaProviderFactory CreateFactory(
         IEnumerable<IMediaProvider> providers,
         ProvidersOptions? options = null) =>
-        new(providers, Options.Create(options ?? new ProvidersOptions()));
+        new(providers, Options.Create(options ?? new ProvidersOptions()), new TestOperationalSettings());
 
     private static IMediaProviderExecutor CreateExecutor(
         IEnumerable<IMediaProvider> providers,
         ProvidersOptions? options = null)
     {
         var opts = Options.Create(options ?? new ProvidersOptions());
+        var operational = new TestOperationalSettings();
         var resolver = CreateResolver(opts.Value);
         return new MediaProviderExecutor(
             new MediaProviderResolver(CreateFactory(providers, options)),
             new ProviderResultValidator(resolver, opts),
             opts,
+            operational,
             NullLogger<MediaProviderExecutor>.Instance);
     }
 

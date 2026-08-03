@@ -16,5 +16,14 @@ public interface IUserRepository
 
     Task UpdateAsync(User user, CancellationToken cancellationToken = default);
 
+    Task<(IReadOnlyList<User> Items, int TotalCount)> ListAsync(
+        int page,
+        int pageSize,
+        string? search,
+        bool? isActive,
+        string? sortBy = null,
+        string? sortDir = null,
+        CancellationToken cancellationToken = default);
+
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }

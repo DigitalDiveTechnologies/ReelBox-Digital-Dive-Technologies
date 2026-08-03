@@ -9,6 +9,10 @@ public interface IMediaRepository
         Guid mediaId,
         CancellationToken cancellationToken = default);
 
+    Task<MediaItem?> GetByIdWithUserAsync(
+        Guid mediaId,
+        CancellationToken cancellationToken = default);
+
     Task<MediaItem?> GetByIdForUserAsync(
         Guid mediaId,
         Guid userId,
@@ -25,6 +29,26 @@ public interface IMediaRepository
         int pageSize,
         MediaStatus? status,
         MediaPlatform? platform,
+        CancellationToken cancellationToken = default);
+
+    Task<(IReadOnlyList<MediaItem> Items, int TotalCount)> ListAdminAsync(
+        int page,
+        int pageSize,
+        string? search,
+        MediaStatus? status,
+        MediaPlatform? platform,
+        Guid? userId,
+        IReadOnlyList<MediaStatus>? statusIn,
+        string? sortBy = null,
+        string? sortDir = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<MediaStatus, int>> StatusCountsAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<long> SumFileSizeBytesAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<(string? MediaStorageKey, string? ThumbnailStorageKey)>> ListStorageKeysAsync(
         CancellationToken cancellationToken = default);
 
     Task AddAsync(MediaItem item, CancellationToken cancellationToken = default);

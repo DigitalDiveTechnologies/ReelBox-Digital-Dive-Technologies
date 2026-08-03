@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Serilog;
 using SocialReelSaver.Api.Extensions;
 using SocialReelSaver.Api.Middleware;
@@ -8,12 +9,25 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
+    builder.Configuration.AddJsonFile(
+        $"appsettings.{builder.Environment.EnvironmentName}.local.json",
+        optional: true,
+        reloadOnChange: true);
+
     builder.Host.UseSerilog((context, services, configuration) => configuration
         .ReadFrom.Configuration(context.Configuration)
         .ReadFrom.Services(services)
         .Enrich.FromLogContext()
         .Enrich.WithProperty("Application", "SocialReelSaver.Api")
         .WriteTo.Console());
+
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        // SmarterASP / reverse proxies — clear defaults so X-Forwarded-* is honored.
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
 
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
@@ -26,8 +40,26 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi();
 
+    var corsOrigins = builder.Configuration.GetSection("Cors:AdminOrigins").Get<string[]>() ?? [];
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("AdminPanel", policy =>
+        {
+            if (corsOrigins.Length == 0)
+            {
+                policy.SetIsOriginAllowed(_ => false);
+                return;
+            }
+
+            policy.WithOrigins(corsOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        });
+    });
+
     var app = builder.Build();
 
+    app.UseForwardedHeaders();
     app.UseMiddleware<ExceptionHandlingMiddleware>();
     app.UseSerilogRequestLogging();
 
@@ -36,6 +68,7 @@ try
         app.MapOpenApi();
     }
 
+    app.UseCors("AdminPanel");
     app.UseAuthentication();
     app.UseAuthorization();
 
@@ -50,6 +83,8 @@ try
     }).AllowAnonymous();
 
     app.MapControllers();
+
+    await SocialReelSaver.Infrastructure.Persistence.AdminUserBootstrap.EnsureSeedAsync(app.Services);
 
     app.Run();
 }
