@@ -11,6 +11,10 @@ class ApiEndpoints {
   static const String authMe = '$apiV1/auth/me';
   static const String authForgotPassword = '$apiV1/auth/forgot-password';
   static const String authResetPassword = '$apiV1/auth/reset-password';
+  static const String authVerifyEmail = '$apiV1/auth/verify-email';
+  /// Alias kept for older clients / docs; same handler as [authVerifyEmail].
+  static const String authVerifyOtp = '$apiV1/auth/verify-otp';
+  static const String authResendSignupOtp = '$apiV1/auth/resend-signup-otp';
 
   static const String media = '$apiV1/media';
 

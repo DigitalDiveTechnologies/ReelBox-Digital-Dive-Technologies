@@ -40,8 +40,33 @@ public sealed class SmtpEmailService : IEmailService
         if (string.IsNullOrWhiteSpace(_options.Host) ||
             string.IsNullOrWhiteSpace(_options.FromEmail))
         {
+            _logger.LogError(
+                "SMTP config incomplete. HostConfigured={HostConfigured} FromConfigured={FromConfigured} UsernameConfigured={UsernameConfigured} PasswordConfigured={PasswordConfigured} Port={Port} EnableSsl={EnableSsl}",
+                !string.IsNullOrWhiteSpace(_options.Host),
+                !string.IsNullOrWhiteSpace(_options.FromEmail),
+                !string.IsNullOrWhiteSpace(_options.Username),
+                !string.IsNullOrWhiteSpace(_options.Password),
+                _options.Port,
+                _options.EnableSsl);
+
             throw new InvalidOperationException(
                 "SMTP is not configured. Set Smtp:Host and Smtp:FromEmail.");
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.Username) ||
+            string.IsNullOrWhiteSpace(_options.Password))
+        {
+            _logger.LogError(
+                "SMTP credentials missing. Host={Host} Port={Port} EnableSsl={EnableSsl} FromEmail={FromEmail} UsernameConfigured={UsernameConfigured} PasswordConfigured={PasswordConfigured}",
+                _options.Host,
+                _options.Port,
+                _options.EnableSsl,
+                _options.FromEmail,
+                !string.IsNullOrWhiteSpace(_options.Username),
+                !string.IsNullOrWhiteSpace(_options.Password));
+
+            throw new InvalidOperationException(
+                "SMTP credentials are not configured. Set Smtp:Username and Smtp:Password.");
         }
 
         using var message = new MailMessage
@@ -85,9 +110,31 @@ public sealed class SmtpEmailService : IEmailService
             await client.SendMailAsync(message, cancellationToken);
             _logger.LogInformation("SMTP email sent to {ToEmail} subject={Subject}", toEmail, subject);
         }
+        catch (SmtpException smtpEx)
+        {
+            _logger.LogError(
+                smtpEx,
+                "SMTP send failed. To={ToEmail} Host={Host} Port={Port} EnableSsl={EnableSsl} UsernameConfigured={UsernameConfigured} StatusCode={StatusCode} Inner={Inner}",
+                toEmail,
+                _options.Host,
+                _options.Port,
+                _options.EnableSsl,
+                !string.IsNullOrWhiteSpace(_options.Username),
+                smtpEx.StatusCode,
+                smtpEx.InnerException?.ToString() ?? "(none)");
+            throw;
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send SMTP email to {ToEmail}", toEmail);
+            _logger.LogError(
+                ex,
+                "SMTP send failed (non-SmtpException). To={ToEmail} Host={Host} Port={Port} EnableSsl={EnableSsl} UsernameConfigured={UsernameConfigured} Inner={Inner}",
+                toEmail,
+                _options.Host,
+                _options.Port,
+                _options.EnableSsl,
+                !string.IsNullOrWhiteSpace(_options.Username),
+                ex.InnerException?.ToString() ?? "(none)");
             throw;
         }
     }

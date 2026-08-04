@@ -10,6 +10,10 @@ public sealed record ForgotPasswordRequest(string Email);
 
 public sealed record ResetPasswordRequest(string Email, string Otp, string NewPassword);
 
+public sealed record VerifyEmailRequest(string Email, string Otp);
+
+public sealed record ResendSignupOtpRequest(string Email);
+
 public sealed record MessageResponse(string Message);
 
 public sealed record UserResponse(Guid Id, string Email, DateTimeOffset CreatedAt);

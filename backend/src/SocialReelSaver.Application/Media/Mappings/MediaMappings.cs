@@ -16,6 +16,7 @@ public static class MediaMappings
             item.OriginalUrl,
             item.NormalizedUrl,
             item.Title,
+            item.Category,
             item.ThumbnailStorageKey,
             item.MediaStorageKey,
             item.MimeType,

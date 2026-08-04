@@ -11,6 +11,7 @@ import '../../../../core/theme/app_gradients.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/models/media_item_preview.dart';
 import '../../../../shared/models/media_platform.dart';
+import '../../../../shared/models/reel_category.dart';
 import '../../../../shared/widgets/app_empty_state.dart';
 import '../../../media/presentation/providers/media_providers.dart';
 import '../widgets/library_filter_chips.dart';
@@ -29,6 +30,7 @@ class LibraryPage extends ConsumerStatefulWidget {
 class _LibraryPageState extends ConsumerState<LibraryPage>
     with WidgetsBindingObserver {
   MediaPlatform? _platformFilter;
+  String? _categoryFilter;
   Timer? _pollTimer;
 
   @override
@@ -60,9 +62,16 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
   }
 
   List<MediaItemPreview> _filtered(List<MediaItemPreview> items) {
-    final filtered = _platformFilter == null
-        ? List<MediaItemPreview>.from(items)
-        : items.where((m) => m.platform == _platformFilter).toList();
+    var filtered = List<MediaItemPreview>.from(items);
+    if (_platformFilter != null) {
+      filtered = filtered.where((m) => m.platform == _platformFilter).toList();
+    }
+    if (_categoryFilter != null) {
+      filtered = filtered
+          .where((m) =>
+              (m.category ?? ReelCategory.general) == _categoryFilter)
+          .toList();
+    }
     filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return filtered;
   }
@@ -129,6 +138,16 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
                         selected: _platformFilter,
                         onSelected: (platform) {
                           setState(() => _platformFilter = platform);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: horizontal),
+                      child: LibraryCategoryFilterChips(
+                        selected: _categoryFilter,
+                        onSelected: (category) {
+                          setState(() => _categoryFilter = category);
                         },
                       ),
                     ),

@@ -11,6 +11,7 @@ public sealed record MediaResponse(
     string OriginalUrl,
     string? NormalizedUrl,
     string? Title,
+    string? Category,
     string? ThumbnailStorageKey,
     string? MediaStorageKey,
     string? MimeType,

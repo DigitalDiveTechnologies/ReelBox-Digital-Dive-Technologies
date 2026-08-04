@@ -18,6 +18,8 @@ public sealed class AuthController : ControllerBase
     private readonly GetCurrentUserUseCase _getCurrentUser;
     private readonly ForgotUserPasswordUseCase _forgotPassword;
     private readonly ResetUserPasswordUseCase _resetPassword;
+    private readonly VerifySignupOtpUseCase _verifySignup;
+    private readonly ResendSignupOtpUseCase _resendSignupOtp;
 
     public AuthController(
         RegisterUserUseCase register,
@@ -26,7 +28,9 @@ public sealed class AuthController : ControllerBase
         LogoutUserUseCase logout,
         GetCurrentUserUseCase getCurrentUser,
         ForgotUserPasswordUseCase forgotPassword,
-        ResetUserPasswordUseCase resetPassword)
+        ResetUserPasswordUseCase resetPassword,
+        VerifySignupOtpUseCase verifySignup,
+        ResendSignupOtpUseCase resendSignupOtp)
     {
         _register = register;
         _login = login;
@@ -35,11 +39,13 @@ public sealed class AuthController : ControllerBase
         _getCurrentUser = getCurrentUser;
         _forgotPassword = forgotPassword;
         _resetPassword = resetPassword;
+        _verifySignup = verifySignup;
+        _resendSignupOtp = resendSignupOtp;
     }
 
     [HttpPost("register")]
     [AllowAnonymous]
-    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register(
@@ -49,7 +55,37 @@ public sealed class AuthController : ControllerBase
     {
         await validator.ValidateAndThrowAsync(request, cancellationToken);
         var result = await _register.HandleAsync(request, cancellationToken);
-        return Created("/api/v1/auth/me", result);
+        return Ok(result);
+    }
+
+    [HttpPost("verify-email")]
+    [HttpPost("verify-otp")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> VerifyEmail(
+        [FromBody] VerifyEmailRequest request,
+        IValidator<VerifyEmailRequest> validator,
+        CancellationToken cancellationToken)
+    {
+        await validator.ValidateAndThrowAsync(request, cancellationToken);
+        var result = await _verifySignup.HandleAsync(request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("resend-signup-otp")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResendSignupOtp(
+        [FromBody] ResendSignupOtpRequest request,
+        IValidator<ResendSignupOtpRequest> validator,
+        CancellationToken cancellationToken)
+    {
+        await validator.ValidateAndThrowAsync(request, cancellationToken);
+        var result = await _resendSignupOtp.HandleAsync(request, cancellationToken);
+        return Ok(result);
     }
 
     [HttpPost("login")]

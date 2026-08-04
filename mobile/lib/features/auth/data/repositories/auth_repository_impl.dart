@@ -70,13 +70,24 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<AuthUser> register({
+  Future<String> register({
     required String email,
     required String password,
-  }) async {
-    final session = await remoteDataSource.register(
+  }) {
+    return remoteDataSource.register(
       email: email.trim(),
       password: password,
+    );
+  }
+
+  @override
+  Future<AuthUser> verifySignupOtp({
+    required String email,
+    required String otp,
+  }) async {
+    final session = await remoteDataSource.verifySignupOtp(
+      email: email.trim(),
+      otp: otp.trim(),
     );
     await localDataSource.saveTokens(
       accessToken: session.tokens.accessToken,
@@ -85,6 +96,11 @@ class AuthRepositoryImpl implements AuthRepository {
     final user = session.user.toDomain();
     await localDataSource.saveCachedUser(id: user.id, email: user.email);
     return user;
+  }
+
+  @override
+  Future<String> resendSignupOtp({required String email}) {
+    return remoteDataSource.resendSignupOtp(email: email.trim());
   }
 
   @override

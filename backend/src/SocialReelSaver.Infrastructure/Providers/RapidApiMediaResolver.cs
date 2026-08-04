@@ -108,34 +108,50 @@ public sealed class RapidApiMediaResolver
 
             using var response = await client.SendAsync(request, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            var statusCode = (int)response.StatusCode;
+            var quotaHeaders = FormatQuotaHeaders(response);
 
-            if (response.StatusCode == HttpStatusCode.TooManyRequests ||
-                (int)response.StatusCode == 429)
+            if (response.StatusCode == HttpStatusCode.TooManyRequests || statusCode == 429)
             {
+                _logger.LogWarning(
+                    "RapidAPI HTTP 429 (rate limit / quota) for media {MediaId} platform {Platform}. QuotaHeaders={QuotaHeaders} Body={Body}",
+                    mediaId,
+                    platform,
+                    quotaHeaders,
+                    Truncate(body, 500));
+
                 return ProviderResult.Failed(
                     ProviderErrorCode.TemporaryFailure,
                     "RapidAPI rate limit exceeded. Try again later.");
             }
 
-            if ((int)response.StatusCode >= 500)
+            if (statusCode >= 500)
             {
+                _logger.LogWarning(
+                    "RapidAPI HTTP {Status} temporary failure for media {MediaId}. QuotaHeaders={QuotaHeaders} Body={Body}",
+                    statusCode,
+                    mediaId,
+                    quotaHeaders,
+                    Truncate(body, 400));
+
                 return ProviderResult.Failed(
                     ProviderErrorCode.TemporaryFailure,
-                    $"RapidAPI temporary failure (HTTP {(int)response.StatusCode}).");
+                    $"RapidAPI temporary failure (HTTP {statusCode}).");
             }
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "RapidAPI non-success for media {MediaId} platform {Platform}: HTTP {Status} body={Body}",
+                    "RapidAPI non-success for media {MediaId} platform {Platform}: HTTP {Status} QuotaHeaders={QuotaHeaders} body={Body}",
                     mediaId,
                     platform,
-                    (int)response.StatusCode,
+                    statusCode,
+                    quotaHeaders,
                     Truncate(body, 400));
 
                 return ProviderResult.Failed(
                     MapClientError(response.StatusCode),
-                    $"RapidAPI request failed (HTTP {(int)response.StatusCode}).");
+                    $"RapidAPI request failed (HTTP {statusCode}).");
             }
 
             if (string.IsNullOrWhiteSpace(body))
@@ -415,6 +431,43 @@ public sealed class RapidApiMediaResolver
     {
         var unescaped = System.Net.WebUtility.HtmlDecode(value);
         return Regex.Replace(unescaped, @"\\/", "/");
+    }
+
+    private static string FormatQuotaHeaders(HttpResponseMessage response)
+    {
+        static string? Read(HttpResponseMessage r, string name) =>
+            r.Headers.TryGetValues(name, out var values)
+                ? string.Join(",", values)
+                : r.Content.Headers.TryGetValues(name, out var contentValues)
+                    ? string.Join(",", contentValues)
+                    : null;
+
+        var parts = new List<string>();
+        foreach (var header in new[]
+                 {
+                     "x-ratelimit-requests-limit",
+                     "x-ratelimit-requests-remaining",
+                     "x-ratelimit-requests-reset",
+                     "X-RateLimit-Requests-Limit",
+                     "X-RateLimit-Requests-Remaining",
+                     "X-RateLimit-Requests-Reset",
+                     "x-rate-limit-limit",
+                     "x-rate-limit-remaining",
+                     "x-rate-limit-reset",
+                     "retry-after",
+                     "x-rapidapi-rate-limit",
+                     "x-rapidapi-rate-remaining",
+                     "x-rapidapi-proxy-response",
+                 })
+        {
+            var value = Read(response, header);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                parts.Add($"{header}={value}");
+            }
+        }
+
+        return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
     }
 
     private static ProviderErrorCode MapClientError(HttpStatusCode status) =>

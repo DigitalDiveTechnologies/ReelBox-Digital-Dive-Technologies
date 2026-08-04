@@ -30,13 +30,21 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     }
   }
 
-  Future<AuthUser> register({
+  /// Starts signup (sends OTP). Does not create a session yet.
+  Future<String> register({
     required String email,
     required String password,
+  }) {
+    return _repository.register(email: email, password: password);
+  }
+
+  Future<AuthUser> verifySignupOtp({
+    required String email,
+    required String otp,
   }) async {
     state = const AsyncLoading();
     try {
-      final user = await _repository.register(email: email, password: password);
+      final user = await _repository.verifySignupOtp(email: email, otp: otp);
       state = AsyncData(AuthState(user: user));
       return user;
     } catch (error, stackTrace) {

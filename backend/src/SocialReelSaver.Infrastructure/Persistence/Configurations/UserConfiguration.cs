@@ -47,6 +47,19 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("password_reset_otp_expires_at")
             .HasColumnType("timestamp with time zone");
 
+        builder.Property(e => e.EmailVerified)
+            .HasColumnName("email_verified")
+            .IsRequired()
+            .HasDefaultValue(true);
+
+        builder.Property(e => e.EmailVerificationOtpHash)
+            .HasColumnName("email_verification_otp_hash")
+            .HasMaxLength(512);
+
+        builder.Property(e => e.EmailVerificationOtpExpiresAt)
+            .HasColumnName("email_verification_otp_expires_at")
+            .HasColumnType("timestamp with time zone");
+
         builder.Property(e => e.IsActive)
             .HasColumnName("is_active")
             .IsRequired()

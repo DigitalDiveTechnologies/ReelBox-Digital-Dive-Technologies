@@ -20,6 +20,14 @@ public sealed class User
 
     public DateTimeOffset? PasswordResetOtpExpiresAt { get; set; }
 
+    /// <summary>False until signup email OTP is verified. Existing users migrate as true.</summary>
+    public bool EmailVerified { get; set; }
+
+    /// <summary>Hashed 6-digit signup verification OTP (cleared after use / expiry).</summary>
+    public string? EmailVerificationOtpHash { get; set; }
+
+    public DateTimeOffset? EmailVerificationOtpExpiresAt { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; }

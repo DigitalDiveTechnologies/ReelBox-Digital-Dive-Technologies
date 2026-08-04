@@ -59,6 +59,25 @@ try
 
     var app = builder.Build();
 
+    // SMTP startup diagnostics (never log password values).
+    {
+        var smtp = app.Configuration.GetSection("Smtp");
+        var host = smtp["Host"] ?? string.Empty;
+        var port = smtp["Port"] ?? string.Empty;
+        var sslRaw = smtp["EnableSsl"] ?? string.Empty;
+        var username = smtp["Username"] ?? string.Empty;
+        var password = smtp["Password"] ?? string.Empty;
+        var fromEmail = smtp["FromEmail"] ?? string.Empty;
+        Log.Information(
+            "SMTP diagnostics: Host={SmtpHost} Port={SmtpPort} EnableSsl={SmtpSsl} FromEmailConfigured={FromConfigured} UsernameConfigured={UserConfigured} PasswordConfigured={PassConfigured}",
+            host,
+            port,
+            sslRaw,
+            !string.IsNullOrWhiteSpace(fromEmail),
+            !string.IsNullOrWhiteSpace(username),
+            !string.IsNullOrWhiteSpace(password));
+    }
+
     app.UseForwardedHeaders();
     app.UseMiddleware<ExceptionHandlingMiddleware>();
     app.UseSerilogRequestLogging();

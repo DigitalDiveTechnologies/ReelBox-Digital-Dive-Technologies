@@ -13,6 +13,7 @@ class MediaDto {
     required this.retryCount,
     this.normalizedUrl,
     this.title,
+    this.category,
     this.thumbnailStorageKey,
     this.thumbnailUrl,
     this.mediaStorageKey,
@@ -33,6 +34,7 @@ class MediaDto {
   final String originalUrl;
   final String? normalizedUrl;
   final String? title;
+  final String? category;
   final String? thumbnailStorageKey;
   final String? thumbnailUrl;
   final String? mediaStorageKey;
@@ -57,6 +59,7 @@ class MediaDto {
       originalUrl: json['originalUrl']?.toString() ?? '',
       normalizedUrl: json['normalizedUrl']?.toString(),
       title: json['title']?.toString(),
+      category: json['category']?.toString(),
       thumbnailStorageKey: json['thumbnailStorageKey']?.toString(),
       thumbnailUrl: json['thumbnailUrl']?.toString(),
       mediaStorageKey: json['mediaStorageKey']?.toString(),
@@ -88,6 +91,7 @@ class MediaDto {
       createdAt: created,
       savedAt: (downloadedAt ?? createdAt).toLocal(),
       title: title,
+      category: category,
       fileSizeLabel: _formatBytes(fileSizeBytes),
       progressPercent: progressPercent,
       errorMessage: errorMessage,

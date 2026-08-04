@@ -33,6 +33,12 @@ public sealed class LoginUserUseCase
             throw new UnauthorizedAppException("Invalid email or password.");
         }
 
+        if (!user.EmailVerified)
+        {
+            throw new UnauthorizedAppException(
+                "Email not verified. Enter the OTP sent to your email to finish signup.");
+        }
+
         var accessToken = await _jwtTokenService.CreateAccessTokenAsync(user.Id, user.Email, cancellationToken);
         var refreshToken = await _jwtTokenService.CreateRefreshTokenAsync(cancellationToken);
         var refreshExpiry = _jwtTokenService.GetRefreshTokenExpiry();

@@ -28,6 +28,7 @@ public sealed class MediaDownloadPipeline
     private readonly ITemporaryFileManager _tempFiles;
     private readonly IRetryPolicy _retryPolicy;
     private readonly IMediaJobPublisher _publisher;
+    private readonly IMediaCategorizationQueue _categorizationQueue;
     private readonly ObjectStorageOptions _storageOptions;
     private readonly ILogger<MediaDownloadPipeline> _logger;
 
@@ -42,6 +43,7 @@ public sealed class MediaDownloadPipeline
         ITemporaryFileManager tempFiles,
         IRetryPolicy retryPolicy,
         IMediaJobPublisher publisher,
+        IMediaCategorizationQueue categorizationQueue,
         IOptions<ObjectStorageOptions> storageOptions,
         ILogger<MediaDownloadPipeline> logger)
     {
@@ -55,6 +57,7 @@ public sealed class MediaDownloadPipeline
         _tempFiles = tempFiles;
         _retryPolicy = retryPolicy;
         _publisher = publisher;
+        _categorizationQueue = categorizationQueue;
         _storageOptions = storageOptions.Value;
         _logger = logger;
     }
@@ -305,6 +308,16 @@ public sealed class MediaDownloadPipeline
                 "Completed pipeline for media {MediaId} key={StorageKey}",
                 item.Id,
                 mediaUpload.Key);
+
+            // Background AI categorization — never blocks download success.
+            try
+            {
+                await _categorizationQueue.EnqueueAsync(item.Id, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to enqueue categorization for media {MediaId}", item.Id);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

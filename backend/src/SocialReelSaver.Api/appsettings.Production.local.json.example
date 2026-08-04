@@ -22,12 +22,18 @@
     "Password": "REPLACE_ADMIN_PASSWORD",
     "DisplayName": "Super Admin"
   },
+  "Smtp": {
+    "Host": "chocobo.mxrouting.net",
+    "Port": 587,
+    "Username": "support.reelbox@digitaldive.net",
+    "Password": "YOUR_SMTP_PASSWORD",
+    "EnableSsl": true,
+    "FromEmail": "support.reelbox@digitaldive.net",
+    "FromName": "ReelBox Support",
+    "ResetNotifyEmail": "support.reelbox@digitaldive.net"
+  },
   "RapidApi": {
     "ApiKey": "YOUR_RAPIDAPI_KEY"
-  },
-  "Smtp": {
-    "Username": "support.reelbox@digitaldive.net",
-    "Password": "YOUR_SMTP_PASSWORD"
   },
   "Worker": {
     "UseInMemoryQueue": true

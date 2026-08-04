@@ -23,6 +23,9 @@ public sealed class MediaItem
 
     public string? Title { get; set; }
 
+    /// <summary>AI category label (nullable until background categorization finishes).</summary>
+    public string? Category { get; set; }
+
     public string? ThumbnailStorageKey { get; set; }
 
     public string? MediaStorageKey { get; set; }

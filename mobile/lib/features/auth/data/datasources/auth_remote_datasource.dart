@@ -10,7 +10,8 @@ abstract class AuthRemoteDataSource {
     required String password,
   });
 
-  Future<AuthSessionModel> register({
+  /// Starts signup and emails OTP. Does not return tokens.
+  Future<String> register({
     required String email,
     required String password,
   });
@@ -28,6 +29,13 @@ abstract class AuthRemoteDataSource {
     required String otp,
     required String newPassword,
   });
+
+  Future<AuthSessionModel> verifySignupOtp({
+    required String email,
+    required String otp,
+  });
+
+  Future<String> resendSignupOtp({required String email});
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -49,7 +57,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   }
 
   @override
-  Future<AuthSessionModel> register({
+  Future<String> register({
     required String email,
     required String password,
   }) async {
@@ -58,7 +66,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       body: {'email': email, 'password': password},
       authenticated: false,
     );
-    return AuthSessionModel.fromJson(json);
+    return json['message']?.toString() ??
+        'We sent a 6-digit verification code to your email. Enter it to finish signup.';
   }
 
   @override
@@ -110,5 +119,29 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     );
     return json['message']?.toString() ??
         'Password updated. You can sign in with your new password.';
+  }
+
+  @override
+  Future<AuthSessionModel> verifySignupOtp({
+    required String email,
+    required String otp,
+  }) async {
+    final json = await _api.postJson(
+      ApiEndpoints.authVerifyEmail,
+      body: {'email': email, 'otp': otp},
+      authenticated: false,
+    );
+    return AuthSessionModel.fromJson(json);
+  }
+
+  @override
+  Future<String> resendSignupOtp({required String email}) async {
+    final json = await _api.postJson(
+      ApiEndpoints.authResendSignupOtp,
+      body: {'email': email},
+      authenticated: false,
+    );
+    return json['message']?.toString() ??
+        'If an unverified account exists for that email, a new code has been sent.';
   }
 }

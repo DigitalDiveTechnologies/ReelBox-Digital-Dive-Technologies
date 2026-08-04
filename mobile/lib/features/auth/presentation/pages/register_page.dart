@@ -13,6 +13,7 @@ import '../../../share/presentation/providers/pending_share_provider.dart';
 import '../providers/auth_providers.dart';
 import '../widgets/login_brand_mark.dart';
 import '../widgets/login_glass_field.dart';
+import '../widgets/signup_otp_sheet.dart';
 
 /// Register screen — account creation entry (SRS §7 / §16 / §22).
 ///
@@ -97,11 +98,21 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     setState(() => _isSubmitting = true);
     try {
-      await ref.read(authNotifierProvider.notifier).register(
-            email: _emailController.text.trim(),
+      final email = _emailController.text.trim();
+      final message = await ref.read(authNotifierProvider.notifier).register(
+            email: email,
             password: _passwordController.text,
           );
       if (!mounted) return;
+
+      final user = await showSignupOtpSheet(
+        context,
+        email: email,
+        infoMessage: message,
+      );
+      if (!mounted) return;
+      if (user == null) return;
+
       final pendingShareUrl = ref.read(pendingShareUrlProvider);
       if (pendingShareUrl != null && pendingShareUrl.trim().isNotEmpty) {
         context.go(shareRouteForUrl(pendingShareUrl.trim()));

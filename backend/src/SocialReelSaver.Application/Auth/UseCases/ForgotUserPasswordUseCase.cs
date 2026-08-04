@@ -39,7 +39,7 @@ public sealed class ForgotUserPasswordUseCase
         var email = request.Email.Trim().ToLowerInvariant();
         var user = await _users.GetByEmailAsync(email, cancellationToken);
 
-        if (user is null || !user.IsActive)
+        if (user is null || !user.IsActive || !user.EmailVerified)
         {
             return new MessageResponse(genericMessage);
         }
@@ -66,7 +66,12 @@ public sealed class ForgotUserPasswordUseCase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send password-reset OTP to {Email}", user.Email);
+            _logger.LogError(
+                ex,
+                "Failed to send password-reset OTP to {Email}. Exception={ExceptionType} Inner={Inner}",
+                user.Email,
+                ex.GetType().FullName,
+                ex.InnerException?.ToString() ?? "(none)");
             throw;
         }
 

@@ -74,3 +74,31 @@ public sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPassw
             .Matches("[0-9]").WithMessage("Password must contain at least one digit.");
     }
 }
+
+public sealed class VerifyEmailRequestValidator : AbstractValidator<VerifyEmailRequest>
+{
+    public VerifyEmailRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty()
+            .EmailAddress()
+            .MaximumLength(256);
+
+        RuleFor(x => x.Otp)
+            .NotEmpty()
+            .Length(6)
+            .Matches(@"^\d{6}$")
+            .WithMessage("OTP must be a 6-digit code.");
+    }
+}
+
+public sealed class ResendSignupOtpRequestValidator : AbstractValidator<ResendSignupOtpRequest>
+{
+    public ResendSignupOtpRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty()
+            .EmailAddress()
+            .MaximumLength(256);
+    }
+}

@@ -11,6 +11,7 @@ class MediaItemPreview {
     required this.createdAt,
     required this.savedAt,
     this.title,
+    this.category,
     this.fileSizeLabel,
     this.progressPercent,
     this.errorMessage,
@@ -31,6 +32,9 @@ class MediaItemPreview {
   /// Best-effort display timestamp (`downloadedAt` or `createdAt`).
   final DateTime savedAt;
   final String? title;
+
+  /// AI category from backend (nullable until background job finishes).
+  final String? category;
   final String? fileSizeLabel;
   final int? progressPercent;
   final String? errorMessage;

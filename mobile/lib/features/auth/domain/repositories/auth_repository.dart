@@ -9,10 +9,18 @@ abstract class AuthRepository {
     required String password,
   });
 
-  Future<AuthUser> register({
+  /// Starts signup (emails OTP). No session until [verifySignupOtp].
+  Future<String> register({
     required String email,
     required String password,
   });
+
+  Future<AuthUser> verifySignupOtp({
+    required String email,
+    required String otp,
+  });
+
+  Future<String> resendSignupOtp({required String email});
 
   Future<void> logout();
 

@@ -53,6 +53,10 @@ public sealed class MediaItemConfiguration : IEntityTypeConfiguration<MediaItem>
             .HasColumnName("title")
             .HasColumnType("text");
 
+        builder.Property(e => e.Category)
+            .HasColumnName("category")
+            .HasMaxLength(64);
+
         builder.Property(e => e.ThumbnailStorageKey)
             .HasColumnName("thumbnail_storage_key")
             .HasColumnType("text");

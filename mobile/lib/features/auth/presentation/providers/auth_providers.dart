@@ -11,7 +11,9 @@ import '../../domain/usecases/get_current_user_usecase.dart';
 import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/logout_usecase.dart';
 import '../../domain/usecases/register_usecase.dart';
+import '../../domain/usecases/resend_signup_otp_usecase.dart';
 import '../../domain/usecases/reset_password_usecase.dart';
+import '../../domain/usecases/verify_signup_otp_usecase.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/auth_notifier.dart';
 
@@ -41,6 +43,14 @@ final loginUseCaseProvider = Provider<LoginUseCase>((ref) {
 
 final registerUseCaseProvider = Provider<RegisterUseCase>((ref) {
   return RegisterUseCase(ref.watch(authRepositoryProvider));
+});
+
+final verifySignupOtpUseCaseProvider = Provider<VerifySignupOtpUseCase>((ref) {
+  return VerifySignupOtpUseCase(ref.watch(authRepositoryProvider));
+});
+
+final resendSignupOtpUseCaseProvider = Provider<ResendSignupOtpUseCase>((ref) {
+  return ResendSignupOtpUseCase(ref.watch(authRepositoryProvider));
 });
 
 final logoutUseCaseProvider = Provider<LogoutUseCase>((ref) {

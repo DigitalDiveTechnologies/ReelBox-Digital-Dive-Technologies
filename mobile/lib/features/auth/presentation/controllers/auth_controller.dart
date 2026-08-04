@@ -18,11 +18,18 @@ class AuthController {
     return _repository.login(email: email, password: password);
   }
 
-  Future<AuthUser> register({
+  Future<String> register({
     required String email,
     required String password,
   }) {
     return _repository.register(email: email, password: password);
+  }
+
+  Future<AuthUser> verifySignupOtp({
+    required String email,
+    required String otp,
+  }) {
+    return _repository.verifySignupOtp(email: email, otp: otp);
   }
 
   Future<void> logout() {
