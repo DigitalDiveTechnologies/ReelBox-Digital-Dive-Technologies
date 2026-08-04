@@ -20,6 +20,14 @@ abstract class AuthRemoteDataSource {
   Future<AuthUserModel?> getCurrentUser();
 
   Future<AuthSessionModel> refreshToken({required String refreshToken});
+
+  Future<String> forgotPassword({required String email});
+
+  Future<String> resetPassword({
+    required String email,
+    required String otp,
+    required String newPassword,
+  });
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -72,5 +80,35 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       authenticated: false,
     );
     return AuthSessionModel.fromJson(json);
+  }
+
+  @override
+  Future<String> forgotPassword({required String email}) async {
+    final json = await _api.postJson(
+      ApiEndpoints.authForgotPassword,
+      body: {'email': email},
+      authenticated: false,
+    );
+    return json['message']?.toString() ??
+        'If an account exists for that email, a reset code has been sent.';
+  }
+
+  @override
+  Future<String> resetPassword({
+    required String email,
+    required String otp,
+    required String newPassword,
+  }) async {
+    final json = await _api.postJson(
+      ApiEndpoints.authResetPassword,
+      body: {
+        'email': email,
+        'otp': otp,
+        'newPassword': newPassword,
+      },
+      authenticated: false,
+    );
+    return json['message']?.toString() ??
+        'Password updated. You can sign in with your new password.';
   }
 }

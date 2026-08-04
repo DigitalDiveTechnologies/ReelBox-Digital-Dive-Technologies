@@ -106,6 +106,24 @@ class AuthRepositoryImpl implements AuthRepository {
     return _refreshIfPossible();
   }
 
+  @override
+  Future<String> forgotPassword({required String email}) {
+    return remoteDataSource.forgotPassword(email: email.trim());
+  }
+
+  @override
+  Future<String> resetPassword({
+    required String email,
+    required String otp,
+    required String newPassword,
+  }) {
+    return remoteDataSource.resetPassword(
+      email: email.trim(),
+      otp: otp.trim(),
+      newPassword: newPassword,
+    );
+  }
+
   Future<bool> _refreshIfPossible() async {
     final refresh = await localDataSource.getRefreshToken();
     if (refresh == null || refresh.isEmpty) {

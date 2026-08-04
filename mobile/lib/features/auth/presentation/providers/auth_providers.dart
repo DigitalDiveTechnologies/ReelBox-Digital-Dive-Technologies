@@ -6,10 +6,12 @@ import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/entities/auth_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/usecases/check_auth_status_usecase.dart';
+import '../../domain/usecases/forgot_password_usecase.dart';
 import '../../domain/usecases/get_current_user_usecase.dart';
 import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/logout_usecase.dart';
 import '../../domain/usecases/register_usecase.dart';
+import '../../domain/usecases/reset_password_usecase.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/auth_notifier.dart';
 
@@ -43,6 +45,14 @@ final registerUseCaseProvider = Provider<RegisterUseCase>((ref) {
 
 final logoutUseCaseProvider = Provider<LogoutUseCase>((ref) {
   return LogoutUseCase(ref.watch(authRepositoryProvider));
+});
+
+final forgotPasswordUseCaseProvider = Provider<ForgotPasswordUseCase>((ref) {
+  return ForgotPasswordUseCase(ref.watch(authRepositoryProvider));
+});
+
+final resetPasswordUseCaseProvider = Provider<ResetPasswordUseCase>((ref) {
+  return ResetPasswordUseCase(ref.watch(authRepositoryProvider));
 });
 
 final checkAuthStatusUseCaseProvider = Provider<CheckAuthStatusUseCase>((ref) {

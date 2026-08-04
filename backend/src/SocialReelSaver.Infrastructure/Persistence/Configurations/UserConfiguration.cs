@@ -39,6 +39,14 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("refresh_token_expires_at")
             .HasColumnType("timestamp with time zone");
 
+        builder.Property(e => e.PasswordResetOtpHash)
+            .HasColumnName("password_reset_otp_hash")
+            .HasMaxLength(512);
+
+        builder.Property(e => e.PasswordResetOtpExpiresAt)
+            .HasColumnName("password_reset_otp_expires_at")
+            .HasColumnType("timestamp with time zone");
+
         builder.Property(e => e.IsActive)
             .HasColumnName("is_active")
             .IsRequired()

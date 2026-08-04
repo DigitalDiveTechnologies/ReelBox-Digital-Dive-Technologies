@@ -9,6 +9,7 @@ import '../../../../core/theme/app_gradients.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../share/presentation/providers/pending_share_provider.dart';
 import '../providers/auth_providers.dart';
+import '../widgets/forgot_password_sheet.dart';
 import '../widgets/login_brand_mark.dart';
 import '../widgets/login_glass_field.dart';
 
@@ -65,10 +66,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     return null;
   }
 
-  void _onForgotPassword() {
+  Future<void> _onForgotPassword() async {
+    final reset = await showForgotPasswordSheet(
+      context,
+      initialEmail: _emailController.text.trim(),
+    );
+    if (!mounted || reset != true) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Password reset will be available when auth APIs are connected.'),
+        content: Text('Password updated. You can sign in now.'),
       ),
     );
   }

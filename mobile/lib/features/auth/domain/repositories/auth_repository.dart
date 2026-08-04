@@ -17,4 +17,12 @@ abstract class AuthRepository {
   Future<void> logout();
 
   Future<bool> isAuthenticated();
+
+  Future<String> forgotPassword({required String email});
+
+  Future<String> resetPassword({
+    required String email,
+    required String otp,
+    required String newPassword,
+  });
 }

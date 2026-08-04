@@ -6,6 +6,12 @@ public sealed record LoginRequest(string Email, string Password);
 
 public sealed record RefreshRequest(string RefreshToken);
 
+public sealed record ForgotPasswordRequest(string Email);
+
+public sealed record ResetPasswordRequest(string Email, string Otp, string NewPassword);
+
+public sealed record MessageResponse(string Message);
+
 public sealed record UserResponse(Guid Id, string Email, DateTimeOffset CreatedAt);
 
 public sealed record AuthTokensResponse(

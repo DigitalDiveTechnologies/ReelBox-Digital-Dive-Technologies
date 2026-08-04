@@ -38,3 +38,39 @@ public sealed class RefreshRequestValidator : AbstractValidator<RefreshRequest>
         RuleFor(x => x.RefreshToken).NotEmpty().MaximumLength(512);
     }
 }
+
+public sealed class ForgotPasswordRequestValidator : AbstractValidator<ForgotPasswordRequest>
+{
+    public ForgotPasswordRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty()
+            .EmailAddress()
+            .MaximumLength(256);
+    }
+}
+
+public sealed class ResetPasswordRequestValidator : AbstractValidator<ResetPasswordRequest>
+{
+    public ResetPasswordRequestValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty()
+            .EmailAddress()
+            .MaximumLength(256);
+
+        RuleFor(x => x.Otp)
+            .NotEmpty()
+            .Length(6)
+            .Matches(@"^\d{6}$")
+            .WithMessage("OTP must be a 6-digit code.");
+
+        RuleFor(x => x.NewPassword)
+            .NotEmpty()
+            .MinimumLength(8)
+            .MaximumLength(128)
+            .Matches("[A-Z]").WithMessage("Password must contain at least one uppercase letter.")
+            .Matches("[a-z]").WithMessage("Password must contain at least one lowercase letter.")
+            .Matches("[0-9]").WithMessage("Password must contain at least one digit.");
+    }
+}
