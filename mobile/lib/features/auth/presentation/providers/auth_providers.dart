@@ -79,6 +79,6 @@ final currentUserProvider = FutureProvider<AuthUser?>((ref) async {
   return authAsync.when(
     data: (state) => state.user,
     loading: () => null,
-    error: (_, __) => null,
+    error: (error, stackTrace) => null,
   );
 });

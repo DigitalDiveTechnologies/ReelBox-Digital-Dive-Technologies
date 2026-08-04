@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/auth_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../providers/auth_providers.dart';
-import 'auth_state.dart';
 
 /// Session notifier — keeps [AuthState] in sync after login/register/logout.
 class AuthNotifier extends AsyncNotifier<AuthState> {
