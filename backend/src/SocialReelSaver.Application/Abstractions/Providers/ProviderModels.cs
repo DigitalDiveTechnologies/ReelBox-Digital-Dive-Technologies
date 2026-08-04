@@ -95,7 +95,7 @@ public sealed record ProviderResult
     public string? LocalFilePath { get; init; }
 
     /// <summary>
-    /// Optional remote thumbnail URL returned by a third-party resolver (e.g. RapidAPI <c>thumb</c>).
+    /// Optional remote thumbnail URL returned by a resolver (e.g. Meta Graph).
     /// </summary>
     public string? ThumbnailSourceUrl { get; init; }
 

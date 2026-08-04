@@ -1,11 +1,14 @@
 {
-  "_comment": "Copy to appsettings.Production.local.json (gitignored). Upload that file with publish output to SmarterASP. Never commit real secrets.",
+  "_comment": "Copy to appsettings.Production.local.json (gitignored). Upload that file with publish output. Never commit real secrets.",
   "ConnectionStrings": {
     "PostgreSQL": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;SSL Mode=Require;Trust Server Certificate=true",
-    "Redis": ""
+    "Redis": "YOUR_REDIS_HOST:6379"
   },
   "Database": {
     "ConnectionString": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;SSL Mode=Require;Trust Server Certificate=true"
+  },
+  "Redis": {
+    "ConnectionString": "YOUR_REDIS_HOST:6379"
   },
   "ObjectStorage": {
     "PublicApiBaseUrl": "https://YOUR-API-HOST",
@@ -32,10 +35,12 @@
     "FromName": "ReelBox Support",
     "ResetNotifyEmail": "support.reelbox@digitaldive.net"
   },
-  "RapidApi": {
-    "ApiKey": "YOUR_RAPIDAPI_KEY"
+  "Providers": {
+    "Resolver": "YtDlp",
+    "YtDlpExecutablePath": "yt-dlp"
   },
   "Worker": {
-    "UseInMemoryQueue": true
+    "UseInMemoryQueue": false,
+    "StuckJobTimeoutMinutes": 15
   }
 }

@@ -41,7 +41,6 @@ public static class DependencyInjection
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
         services.Configure<DownloadOptions>(configuration.GetSection(DownloadOptions.SectionName));
         services.Configure<ProvidersOptions>(configuration.GetSection(ProvidersOptions.SectionName));
-        services.Configure<RapidApiOptions>(configuration.GetSection(RapidApiOptions.SectionName));
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<AdminJwtOptions>(configuration.GetSection(AdminJwtOptions.SectionName));
         services.Configure<AdminBootstrapOptions>(configuration.GetSection(AdminBootstrapOptions.SectionName));
@@ -102,15 +101,8 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds) + 5);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("SocialReelSaver/1.0");
         });
-        services.AddHttpClient(RapidApiMediaResolver.HttpClientName, (sp, client) =>
-        {
-            var timeoutSeconds = configuration.GetValue("Providers:TimeoutSeconds", 30);
-            client.Timeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds) + 5);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("SocialReelSaver/1.0");
-        });
         services.AddSingleton<MetaGraphMediaResolver>();
         services.AddSingleton<YtDlpMediaResolver>();
-        services.AddSingleton<RapidApiMediaResolver>();
         services.AddSingleton<IMediaProvider, InstagramProvider>();
         services.AddSingleton<IMediaProvider, FacebookProvider>();
         services.AddSingleton<IMediaProviderFactory, MediaProviderFactory>();

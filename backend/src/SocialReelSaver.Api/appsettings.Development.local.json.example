@@ -7,8 +7,8 @@
   "Database": {
     "ConnectionString": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;Ssl Mode=Require;Trust Server Certificate=true;"
   },
-  "RapidApi": {
-    "ApiKey": "YOUR_RAPIDAPI_KEY"
+  "Redis": {
+    "ConnectionString": "localhost:6379"
   },
   "Jwt": {
     "SigningKey": "REPLACE_WITH_LONG_RANDOM_MOBILE_JWT_SIGNING_KEY"
@@ -25,5 +25,12 @@
     "FromEmail": "support.reelbox@digitaldive.net",
     "FromName": "ReelBox Support",
     "ResetNotifyEmail": "support.reelbox@digitaldive.net"
+  },
+  "Providers": {
+    "Resolver": "YtDlp"
+  },
+  "Worker": {
+    "UseInMemoryQueue": false,
+    "StuckJobTimeoutMinutes": 15
   }
 }

@@ -11,18 +11,15 @@ public sealed class InstagramProvider : IMediaProvider
 {
     private readonly MetaGraphMediaResolver _metaResolver;
     private readonly YtDlpMediaResolver _ytDlpResolver;
-    private readonly RapidApiMediaResolver _rapidApiResolver;
     private readonly ProvidersOptions _options;
 
     public InstagramProvider(
         MetaGraphMediaResolver metaResolver,
         YtDlpMediaResolver ytDlpResolver,
-        RapidApiMediaResolver rapidApiResolver,
         IOptions<ProvidersOptions> options)
     {
         _metaResolver = metaResolver;
         _ytDlpResolver = ytDlpResolver;
-        _rapidApiResolver = rapidApiResolver;
         _options = options.Value;
     }
 
@@ -36,43 +33,28 @@ public sealed class InstagramProvider : IMediaProvider
         ProviderContext context,
         CancellationToken cancellationToken = default)
     {
-        if (UseRapidApi)
-        {
-            return _rapidApiResolver.ResolveAsync(
-                Platform,
-                context.OriginalUrl,
-                context.MediaId,
-                cancellationToken);
-        }
-
         return UseYtDlp
             ? _ytDlpResolver.ResolveAsync(Platform, context.OriginalUrl, context.MediaId, cancellationToken)
             : _metaResolver.ResolveAsync(Platform, context.OriginalUrl, cancellationToken);
     }
 
-    private bool UseRapidApi =>
-        string.Equals(_options.Resolver, "RapidApi", StringComparison.OrdinalIgnoreCase);
-
     private bool UseYtDlp =>
-        string.Equals(_options.Resolver, "YtDlp", StringComparison.OrdinalIgnoreCase);
+        !string.Equals(_options.Resolver, "MetaGraph", StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed class FacebookProvider : IMediaProvider
 {
     private readonly MetaGraphMediaResolver _metaResolver;
     private readonly YtDlpMediaResolver _ytDlpResolver;
-    private readonly RapidApiMediaResolver _rapidApiResolver;
     private readonly ProvidersOptions _options;
 
     public FacebookProvider(
         MetaGraphMediaResolver metaResolver,
         YtDlpMediaResolver ytDlpResolver,
-        RapidApiMediaResolver rapidApiResolver,
         IOptions<ProvidersOptions> options)
     {
         _metaResolver = metaResolver;
         _ytDlpResolver = ytDlpResolver;
-        _rapidApiResolver = rapidApiResolver;
         _options = options.Value;
     }
 
@@ -86,25 +68,13 @@ public sealed class FacebookProvider : IMediaProvider
         ProviderContext context,
         CancellationToken cancellationToken = default)
     {
-        if (UseRapidApi)
-        {
-            return _rapidApiResolver.ResolveAsync(
-                Platform,
-                context.OriginalUrl,
-                context.MediaId,
-                cancellationToken);
-        }
-
         return UseYtDlp
             ? _ytDlpResolver.ResolveAsync(Platform, context.OriginalUrl, context.MediaId, cancellationToken)
             : _metaResolver.ResolveAsync(Platform, context.OriginalUrl, cancellationToken);
     }
 
-    private bool UseRapidApi =>
-        string.Equals(_options.Resolver, "RapidApi", StringComparison.OrdinalIgnoreCase);
-
     private bool UseYtDlp =>
-        string.Equals(_options.Resolver, "YtDlp", StringComparison.OrdinalIgnoreCase);
+        !string.Equals(_options.Resolver, "MetaGraph", StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed class MediaProviderFactory : IMediaProviderFactory
@@ -213,14 +183,13 @@ public sealed class MediaProviderResolver : IMediaProviderResolver
 public sealed class ProviderResultValidator : IProviderResultValidator
 {
     private readonly MetaGraphMediaResolver _resolver;
-    private readonly ProvidersOptions _options;
 
     public ProviderResultValidator(
         MetaGraphMediaResolver resolver,
         IOptions<ProvidersOptions> options)
     {
+        _ = options;
         _resolver = resolver;
-        _options = options.Value;
     }
 
     public ProviderResult Validate(ProviderResult result, IMediaProvider provider)
@@ -251,13 +220,8 @@ public sealed class ProviderResultValidator : IProviderResultValidator
                 $"{provider.Name} returned a non-HTTP(S) resolved source URL.");
         }
 
-        // RapidAPI returns third-party CDN hosts; skip Meta allowlist for that resolver.
-        var skipHostAllowlist = string.Equals(
-            _options.Resolver,
-            "RapidApi",
-            StringComparison.OrdinalIgnoreCase);
-
-        if (!skipHostAllowlist && !_resolver.IsAllowedResolvedHost(result.ResolvedSourceUrl))
+        // yt-dlp returns a local file; MetaGraph returns CDN URLs checked against allowlist.
+        if (!_resolver.IsAllowedResolvedHost(result.ResolvedSourceUrl))
         {
             return ProviderResult.Failed(
                 ProviderErrorCode.AccessNotPermitted,

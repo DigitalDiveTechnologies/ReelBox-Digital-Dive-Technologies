@@ -8,8 +8,7 @@ namespace SocialReelSaver.Application.Admin.UseCases;
 
 public sealed class ListProvidersAdminUseCase(
     IOperationalSettings settings,
-    IOptions<ProvidersOptions> providers,
-    IOptions<RapidApiOptions> rapidApi)
+    IOptions<ProvidersOptions> providers)
 {
     public async Task<IReadOnlyList<ProviderAdminItem>> HandleAsync(CancellationToken cancellationToken = default)
     {
@@ -17,19 +16,20 @@ public sealed class ListProvidersAdminUseCase(
         var opts = providers.Value;
         var timeout = settings.GetInt(OperationalSettingKeys.ProviderTimeoutSeconds, opts.TimeoutSeconds);
         var hasToken = !string.IsNullOrWhiteSpace(opts.AccessToken);
-        var hasKey = !string.IsNullOrWhiteSpace(rapidApi.Value.ApiKey);
-        var health = string.Equals(opts.Resolver, "RapidApi", StringComparison.OrdinalIgnoreCase) && !hasKey
-            ? "Degraded"
+        // Wire contract preserved: HasRapidApiKey always false after RapidAPI removal.
+        const bool hasRapidApiKey = false;
+        var health = string.Equals(opts.Resolver, "YtDlp", StringComparison.OrdinalIgnoreCase)
+            ? "Unknown"
             : "Unknown";
 
         return
         [
             Map("InstagramProvider", "instagram", OperationalSettingKeys.ProviderInstagramEnabled,
                 OperationalSettingKeys.ProviderPriorityInstagram, opts.Instagram.Enabled, opts.Instagram.RetryEligible,
-                timeout, opts.Resolver, health, hasToken, hasKey),
+                timeout, opts.Resolver, health, hasToken, hasRapidApiKey),
             Map("FacebookProvider", "facebook", OperationalSettingKeys.ProviderFacebookEnabled,
                 OperationalSettingKeys.ProviderPriorityFacebook, opts.Facebook.Enabled, opts.Facebook.RetryEligible,
-                timeout, opts.Resolver, health, hasToken, hasKey),
+                timeout, opts.Resolver, health, hasToken, hasRapidApiKey),
         ];
     }
 
@@ -47,7 +47,6 @@ public sealed class ListProvidersAdminUseCase(
 public sealed class UpdateProviderAdminUseCase(
     IOperationalSettings settings,
     IOptions<ProvidersOptions> providers,
-    IOptions<RapidApiOptions> rapidApi,
     IAuditLogWriter audit)
 {
     public async Task<ProviderAdminItem> HandleAsync(
@@ -74,7 +73,7 @@ public sealed class UpdateProviderAdminUseCase(
         await audit.WriteAsync(adminId, adminEmail, "provider.updated", "Provider", n,
             null, new { request.TimeoutSeconds, request.Priority, request.Enabled }, ip, correlationId, cancellationToken);
 
-        var list = await new ListProvidersAdminUseCase(settings, providers, rapidApi).HandleAsync(cancellationToken);
+        var list = await new ListProvidersAdminUseCase(settings, providers).HandleAsync(cancellationToken);
         return list.First(x => x.Platform == platform);
     }
 }

@@ -178,7 +178,7 @@ public sealed class MediaDownloadPipeline
             item.FileSizeBytes = validation.FileSizeBytes;
             item.DurationMs = validation.DurationMs;
 
-            // Thumbnail — prefer RapidAPI thumb URL; otherwise FFmpeg (best-effort).
+            // Thumbnail — prefer remote thumb URL from resolver; otherwise FFmpeg (best-effort).
             await _status.MarkThumbnailAsync(item, cancellationToken);
             if (!string.IsNullOrWhiteSpace(resolution.ThumbnailSourceUrl))
             {

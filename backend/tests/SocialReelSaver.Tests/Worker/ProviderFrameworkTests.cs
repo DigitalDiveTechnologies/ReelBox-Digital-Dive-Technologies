@@ -68,7 +68,6 @@ public sealed class ProviderFrameworkTests
         var provider = new InstagramProvider(
             resolver,
             CreateYtDlp(opts.Value),
-            CreateRapidApi(opts.Value),
             opts);
 
         var missing = validator.Validate(ProviderResult.Ok(" "), provider);
@@ -272,9 +271,8 @@ public sealed class ProviderFrameworkTests
         var opts = CloneForMetaGraph(options ?? new ProvidersOptions());
         var meta = CreateResolver(opts, httpHandler);
         var ytDlp = CreateYtDlp(opts);
-        var rapid = CreateRapidApi(opts);
         var o = Options.Create(opts);
-        return [new InstagramProvider(meta, ytDlp, rapid, o), new FacebookProvider(meta, ytDlp, rapid, o)];
+        return [new InstagramProvider(meta, ytDlp, o), new FacebookProvider(meta, ytDlp, o)];
     }
 
     private static ProvidersOptions CloneForMetaGraph(ProvidersOptions source) => new()
@@ -296,43 +294,6 @@ public sealed class ProviderFrameworkTests
             new NoOpTemporaryFileManager(),
             Options.Create(options),
             NullLogger<YtDlpMediaResolver>.Instance);
-
-    private static RapidApiMediaResolver CreateRapidApi(ProvidersOptions options) =>
-        new(
-            new TestHttpClientFactory(new ScriptedHandler(_ =>
-                JsonResponse("""{"download_url":"https://example.com/v.mp4","thumb":"https://example.com/t.jpg","caption":"x"}"""))),
-            Options.Create(new RapidApiOptions
-            {
-                BaseUrl = "https://full-downloader-social-media.p.rapidapi.com",
-                Host = "full-downloader-social-media.p.rapidapi.com",
-                ApiKey = "test-key",
-            }),
-            NullLogger<RapidApiMediaResolver>.Instance);
-
-    [Fact]
-    public async Task RapidApi_ExtractsNestedFacebookThumbnail()
-    {
-        var handler = new ScriptedHandler(_ =>
-            JsonResponse(
-                """{"download_url":"https://example.com/fb.mp4","picture":{"url":"https://scontent.xx.fbcdn.net/v/t15.123/thumb.jpg"},"caption":"fb"}"""));
-        var rapid = new RapidApiMediaResolver(
-            new TestHttpClientFactory(handler),
-            Options.Create(new RapidApiOptions
-            {
-                BaseUrl = "https://full-downloader-social-media.p.rapidapi.com",
-                Host = "full-downloader-social-media.p.rapidapi.com",
-                ApiKey = "test-key",
-            }),
-            NullLogger<RapidApiMediaResolver>.Instance);
-
-        var result = await rapid.ResolveAsync(
-            MediaPlatform.Facebook,
-            "https://www.facebook.com/reel/123/",
-            Guid.NewGuid());
-
-        Assert.True(result.Success);
-        Assert.Equal("https://scontent.xx.fbcdn.net/v/t15.123/thumb.jpg", result.ThumbnailSourceUrl);
-    }
 
     private static MetaGraphMediaResolver CreateResolver(
         ProvidersOptions options,

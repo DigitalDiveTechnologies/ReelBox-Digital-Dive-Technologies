@@ -111,15 +111,11 @@ public sealed class MediaDownloadPipelineTests
             new PipelineTestTempFiles(),
             metaOpts,
             NullLogger<YtDlpMediaResolver>.Instance);
-        var rapid = new RapidApiMediaResolver(
-            new TestHttpClientFactory(handler),
-            Options.Create(new RapidApiOptions { ApiKey = "test", Host = "h", BaseUrl = "https://example.com" }),
-            NullLogger<RapidApiMediaResolver>.Instance);
         var pipeline = CreatePipeline(
             item,
             CreateExecutor([
-                new InstagramProvider(meta, ytDlp, rapid, metaOpts),
-                new FacebookProvider(meta, ytDlp, rapid, metaOpts),
+                new InstagramProvider(meta, ytDlp, metaOpts),
+                new FacebookProvider(meta, ytDlp, metaOpts),
             ]));
 
         await pipeline.ExecuteAsync(CreateJob(item));
