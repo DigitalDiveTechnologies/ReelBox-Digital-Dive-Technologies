@@ -202,7 +202,7 @@ class HttpApiClient implements ApiClient {
       final headers = <String, String>{
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        if (_basicAuthHeader case final basicAuth?) 'Authorization': basicAuth,
+        'Authorization': ?_basicAuthHeader,
       };
       final response = await _http.post(
         uri,
