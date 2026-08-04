@@ -1,0 +1,35 @@
+{
+  "_comment": "Copy to appsettings.Production.local.json (gitignored). Upload that file with publish output to SmarterASP. Never commit real secrets.",
+  "ConnectionStrings": {
+    "PostgreSQL": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;SSL Mode=Require;Trust Server Certificate=true",
+    "Redis": ""
+  },
+  "Database": {
+    "ConnectionString": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;SSL Mode=Require;Trust Server Certificate=true"
+  },
+  "ObjectStorage": {
+    "PublicApiBaseUrl": "https://YOUR-API-HOST",
+    "PlaybackSigningKey": "REPLACE_WITH_LONG_RANDOM_PLAYBACK_SIGNING_KEY"
+  },
+  "Jwt": {
+    "SigningKey": "REPLACE_WITH_LONG_RANDOM_MOBILE_JWT_SIGNING_KEY"
+  },
+  "AdminJwt": {
+    "SigningKey": "REPLACE_WITH_LONG_RANDOM_ADMIN_JWT_SIGNING_KEY"
+  },
+  "AdminBootstrap": {
+    "Email": "support.reelbox@digitaldive.net",
+    "Password": "REPLACE_ADMIN_PASSWORD",
+    "DisplayName": "Super Admin"
+  },
+  "RapidApi": {
+    "ApiKey": "YOUR_RAPIDAPI_KEY"
+  },
+  "Smtp": {
+    "Username": "support.reelbox@digitaldive.net",
+    "Password": "YOUR_SMTP_PASSWORD"
+  },
+  "Worker": {
+    "UseInMemoryQueue": true
+  }
+}
