@@ -48,13 +48,17 @@ public static class DependencyInjection
         services.Configure<WorkerOptions>(configuration.GetSection(WorkerOptions.SectionName));
         services.Configure<FfmpegOptions>(configuration.GetSection(FfmpegOptions.SectionName));
 
-        var databaseConnection = configuration.GetSection(DatabaseOptions.SectionName)["ConnectionString"]
-            ?? configuration.GetConnectionString("PostgreSQL")
-            ?? string.Empty;
+        var databaseConnection = configuration.GetSection(DatabaseOptions.SectionName)["ConnectionString"];
+        if (string.IsNullOrWhiteSpace(databaseConnection))
+        {
+            databaseConnection = configuration.GetConnectionString("PostgreSQL") ?? string.Empty;
+        }
 
-        var redisConnection = configuration.GetSection(RedisOptions.SectionName)["ConnectionString"]
-            ?? configuration.GetConnectionString("Redis")
-            ?? string.Empty;
+        var redisConnection = configuration.GetSection(RedisOptions.SectionName)["ConnectionString"];
+        if (string.IsNullOrWhiteSpace(redisConnection))
+        {
+            redisConnection = configuration.GetConnectionString("Redis") ?? string.Empty;
+        }
 
         services.AddDbContext<AppDbContext>(options =>
         {
@@ -148,12 +152,15 @@ public static class DependencyInjection
         services.AddScoped<IMediaJobPublisher, MediaJobPublisher>();
         services.AddScoped<IMediaJobConsumer, MediaJobConsumer>();
 
-        var healthChecks = services
-            .AddHealthChecks()
-            .AddNpgSql(
+        var healthChecks = services.AddHealthChecks();
+
+        if (!string.IsNullOrWhiteSpace(databaseConnection))
+        {
+            healthChecks.AddNpgSql(
                 connectionString: databaseConnection,
                 name: "postgresql",
                 tags: ["ready", "db"]);
+        }
 
         if (!string.IsNullOrWhiteSpace(redisConnection))
         {
