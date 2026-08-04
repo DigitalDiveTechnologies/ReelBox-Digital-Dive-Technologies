@@ -91,6 +91,7 @@ public static class DependencyInjection
         services.AddScoped<IMediaStatusService, MediaStatusService>();
         services.AddSingleton<IRetryPolicy, ExponentialBackoffRetryPolicy>();
         services.AddScoped<MediaDownloadPipeline>();
+        services.AddScoped<StuckMediaJobReclaimer>();
         services.AddSingleton<IMediaCategorizationQueue, MediaCategorizationQueue>();
         // Keyword engine now; swap implementation for Gemini/OpenAI later without contract changes.
         services.AddScoped<IMediaCategorizationService, KeywordMediaCategorizationService>();

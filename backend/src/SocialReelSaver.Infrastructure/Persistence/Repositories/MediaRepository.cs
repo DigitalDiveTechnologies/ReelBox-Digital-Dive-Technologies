@@ -137,6 +137,21 @@ public sealed class MediaRepository : IMediaRepository
         return rows.Select(x => (x.MediaStorageKey, x.ThumbnailStorageKey)).ToList();
     }
 
+    public async Task<IReadOnlyList<MediaItem>> ListStaleActiveAsync(
+        DateTimeOffset staleBeforeUtc,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        take = Math.Clamp(take, 1, 500);
+        return await _db.MediaItems
+            .Where(m =>
+                (m.Status == MediaStatus.Downloading || m.Status == MediaStatus.Processing) &&
+                (m.DownloadStartedAt ?? m.UpdatedAt) < staleBeforeUtc)
+            .OrderBy(m => m.DownloadStartedAt ?? m.UpdatedAt)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(MediaItem item, CancellationToken cancellationToken = default) =>
         await _db.MediaItems.AddAsync(item, cancellationToken);
 

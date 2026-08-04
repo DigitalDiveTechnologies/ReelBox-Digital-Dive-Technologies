@@ -51,6 +51,14 @@ public interface IMediaRepository
     Task<IReadOnlyList<(string? MediaStorageKey, string? ThumbnailStorageKey)>> ListStorageKeysAsync(
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Active download/process rows whose activity timestamp is older than <paramref name="staleBeforeUtc"/>.
+    /// </summary>
+    Task<IReadOnlyList<MediaItem>> ListStaleActiveAsync(
+        DateTimeOffset staleBeforeUtc,
+        int take,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(MediaItem item, CancellationToken cancellationToken = default);
 
     Task UpdateAsync(MediaItem item, CancellationToken cancellationToken = default);

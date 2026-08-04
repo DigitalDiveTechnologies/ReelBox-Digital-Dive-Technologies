@@ -11,8 +11,8 @@ public static class MediaStateMachine
     {
         [MediaStatus.Preparing] = [MediaStatus.Queued, MediaStatus.Failed],
         [MediaStatus.Queued] = [MediaStatus.Downloading, MediaStatus.Failed],
-        [MediaStatus.Downloading] = [MediaStatus.Processing, MediaStatus.Failed],
-        [MediaStatus.Processing] = [MediaStatus.Completed, MediaStatus.Failed],
+        [MediaStatus.Downloading] = [MediaStatus.Processing, MediaStatus.Failed, MediaStatus.Queued],
+        [MediaStatus.Processing] = [MediaStatus.Completed, MediaStatus.Failed, MediaStatus.Queued],
         [MediaStatus.Failed] = [MediaStatus.Queued],
         [MediaStatus.Completed] = [],
     };

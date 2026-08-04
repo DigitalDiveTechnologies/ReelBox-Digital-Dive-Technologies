@@ -33,8 +33,7 @@ try
     builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddJwtAuthentication(builder.Configuration, builder.Environment);
 
-    // RapidAPI path: process download jobs in-process (no external Worker / Redis required).
-    builder.Services.AddHostedService<SocialReelSaver.Infrastructure.Workers.MediaDownloadWorker>();
+    // Downloads run in SocialReelSaver.Worker only — API enqueues Redis jobs and returns.
 
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();

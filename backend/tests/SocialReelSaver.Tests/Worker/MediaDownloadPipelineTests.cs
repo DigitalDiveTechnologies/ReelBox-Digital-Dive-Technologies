@@ -446,6 +446,12 @@ public sealed class MediaDownloadPipelineTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<(string?, string?)>>([]);
 
+        public Task<IReadOnlyList<MediaItem>> ListStaleActiveAsync(
+            DateTimeOffset staleBeforeUtc,
+            int take,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<MediaItem>>([]);
+
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task UpdateAsync(MediaItem item, CancellationToken cancellationToken = default) => Task.CompletedTask;

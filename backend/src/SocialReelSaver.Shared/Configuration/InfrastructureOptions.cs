@@ -93,4 +93,9 @@ public sealed class WorkerOptions
     public int BaseBackoffSeconds { get; set; } = 2;
 
     public int MaxBackoffSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Stale Downloading/Processing items older than this are reclaimed after Worker crash.
+    /// </summary>
+    public int StuckJobTimeoutMinutes { get; set; } = 15;
 }
