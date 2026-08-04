@@ -6,6 +6,7 @@ using SocialReelSaver.Application.AdminAuth.UseCases;
 using SocialReelSaver.Application.Auth.UseCases;
 using SocialReelSaver.Application.Media.Services;
 using SocialReelSaver.Application.Media.UseCases;
+using SocialReelSaver.Application.Notifications.UseCases;
 
 namespace SocialReelSaver.Application;
 
@@ -85,6 +86,8 @@ public static class DependencyInjection
         services.AddScoped<DeleteMediaUseCase>();
         services.AddScoped<GetPlaybackUseCase>();
         services.AddScoped<GetMediaContentUseCase>();
+
+        services.AddScoped<GetNotificationsListUseCase>();
 
         return services;
     }

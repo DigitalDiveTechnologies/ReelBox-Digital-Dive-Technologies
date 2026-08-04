@@ -39,7 +39,7 @@ public sealed class ForgotUserPasswordUseCase
         var email = request.Email.Trim().ToLowerInvariant();
         var user = await _users.GetByEmailAsync(email, cancellationToken);
 
-        if (user is null || !user.IsActive || !user.EmailVerified)
+        if (user is null || !user.IsActive)
         {
             return new MessageResponse(genericMessage);
         }

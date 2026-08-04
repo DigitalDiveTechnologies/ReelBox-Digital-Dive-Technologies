@@ -22,6 +22,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<AppErrorLog> AppErrorLogs => Set<AppErrorLog>();
 
+    public DbSet<Notification> Notifications => Set<Notification>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);

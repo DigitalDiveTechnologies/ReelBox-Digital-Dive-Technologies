@@ -95,9 +95,15 @@ public sealed record ProviderResult
     public string? LocalFilePath { get; init; }
 
     /// <summary>
-    /// Optional remote thumbnail URL returned by a resolver (e.g. Meta Graph).
+    /// Optional remote thumbnail URL returned by a resolver (e.g. Meta Graph / yt-dlp).
     /// </summary>
     public string? ThumbnailSourceUrl { get; init; }
+
+    /// <summary>
+    /// Optional local thumbnail file already written by the provider (e.g. yt-dlp --write-thumbnail).
+    /// When set, the pipeline skips remote thumb download / FFmpeg when possible.
+    /// </summary>
+    public string? LocalThumbnailPath { get; init; }
 
     public string? Title { get; init; }
 
@@ -125,12 +131,14 @@ public sealed record ProviderResult
         string? extension = null,
         long? durationMs = null,
         string? localFilePath = null,
-        string? thumbnailSourceUrl = null) => new()
+        string? thumbnailSourceUrl = null,
+        string? localThumbnailPath = null) => new()
     {
         Success = true,
         ResolvedSourceUrl = resolvedSourceUrl,
         LocalFilePath = localFilePath,
         ThumbnailSourceUrl = thumbnailSourceUrl,
+        LocalThumbnailPath = localThumbnailPath,
         Title = title,
         SuggestedMimeType = mimeType,
         SuggestedExtension = extension,

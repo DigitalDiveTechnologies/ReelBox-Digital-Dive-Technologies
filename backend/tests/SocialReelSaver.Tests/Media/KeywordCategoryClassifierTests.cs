@@ -13,6 +13,7 @@ public sealed class KeywordCategoryClassifierTests
     [InlineData("valorant aim training", "Games")]
     [InlineData("Best pasta recipe ever", "Food & Dining")]
     [InlineData("Morning gym workout", "Fitness & Health")]
+    [InlineData("BMW M4 drift car review", "Automotive")]
     [InlineData("", "General")]
     public void Classify_ReturnsExpectedCategory(string title, string expected)
     {

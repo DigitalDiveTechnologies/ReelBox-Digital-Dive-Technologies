@@ -18,6 +18,8 @@ class ApiEndpoints {
 
   static const String media = '$apiV1/media';
 
+  static const String notifications = '$apiV1/notifications';
+
   static String mediaById(String id) => '$media/$id';
 
   static String mediaRetry(String id) => '$media/$id/retry';

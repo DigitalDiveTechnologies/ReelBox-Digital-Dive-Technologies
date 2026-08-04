@@ -8,6 +8,7 @@ using SocialReelSaver.Application.Abstractions.Queue;
 using SocialReelSaver.Application.Abstractions.Storage;
 using SocialReelSaver.Application.Media.Errors;
 using SocialReelSaver.Application.Media.Jobs;
+using SocialReelSaver.Domain.Entities;
 using SocialReelSaver.Domain.Enums;
 using SocialReelSaver.Shared.Configuration;
 
@@ -29,6 +30,7 @@ public sealed class MediaDownloadPipeline
     private readonly IRetryPolicy _retryPolicy;
     private readonly IMediaJobPublisher _publisher;
     private readonly IMediaCategorizationQueue _categorizationQueue;
+    private readonly INotificationRepository _notifications;
     private readonly ObjectStorageOptions _storageOptions;
     private readonly ILogger<MediaDownloadPipeline> _logger;
 
@@ -44,6 +46,7 @@ public sealed class MediaDownloadPipeline
         IRetryPolicy retryPolicy,
         IMediaJobPublisher publisher,
         IMediaCategorizationQueue categorizationQueue,
+        INotificationRepository notifications,
         IOptions<ObjectStorageOptions> storageOptions,
         ILogger<MediaDownloadPipeline> logger)
     {
@@ -58,6 +61,7 @@ public sealed class MediaDownloadPipeline
         _retryPolicy = retryPolicy;
         _publisher = publisher;
         _categorizationQueue = categorizationQueue;
+        _notifications = notifications;
         _storageOptions = storageOptions.Value;
         _logger = logger;
     }
@@ -178,9 +182,16 @@ public sealed class MediaDownloadPipeline
             item.FileSizeBytes = validation.FileSizeBytes;
             item.DurationMs = validation.DurationMs;
 
-            // Thumbnail — prefer remote thumb URL from resolver; otherwise FFmpeg (best-effort).
+            // Thumbnail — local yt-dlp thumb → remote URL → FFmpeg (best-effort).
             await _status.MarkThumbnailAsync(item, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(resolution.ThumbnailSourceUrl))
+            if (!string.IsNullOrWhiteSpace(resolution.LocalThumbnailPath) &&
+                File.Exists(resolution.LocalThumbnailPath))
+            {
+                thumbnailTempPath = resolution.LocalThumbnailPath;
+            }
+
+            if (string.IsNullOrWhiteSpace(thumbnailTempPath) &&
+                !string.IsNullOrWhiteSpace(resolution.ThumbnailSourceUrl))
             {
                 var thumbDownload = await _downloader.DownloadAsync(
                     new DownloadContext
@@ -273,14 +284,21 @@ public sealed class MediaDownloadPipeline
             string? thumbnailKey = null;
             if (!string.IsNullOrWhiteSpace(thumbnailTempPath))
             {
+                var thumbExt = Path.GetExtension(thumbnailTempPath);
+                if (string.IsNullOrWhiteSpace(thumbExt))
+                {
+                    thumbExt = ".jpg";
+                }
+
+                var thumbContentType = GuessImageContentType(thumbExt);
                 await using var thumbStream = File.OpenRead(thumbnailTempPath);
-                thumbnailKey = BuildObjectKey(item.UserId, item.Id, "thumb", ".jpg");
+                thumbnailKey = BuildObjectKey(item.UserId, item.Id, "thumb", thumbExt);
                 var thumbUpload = await storage.ReplaceAsync(
                     new StorageUploadRequest
                     {
                         Key = thumbnailKey,
                         Content = thumbStream,
-                        ContentType = "image/jpeg",
+                        ContentType = thumbContentType,
                     },
                     uploadCts.Token);
 
@@ -308,6 +326,28 @@ public sealed class MediaDownloadPipeline
                 "Completed pipeline for media {MediaId} key={StorageKey}",
                 item.Id,
                 mediaUpload.Key);
+
+            // In-app notification — never blocks download success.
+            try
+            {
+                await _notifications.AddAsync(
+                    new Notification
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = item.UserId,
+                        Title = "Reel Downloaded",
+                        Message = "Your reel has been saved to your library.",
+                        IsRead = false,
+                        MediaId = item.Id,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    },
+                    CancellationToken.None);
+                await _notifications.SaveChangesAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to create download notification for media {MediaId}", item.Id);
+            }
 
             // Background AI categorization — never blocks download success.
             try
@@ -420,5 +460,14 @@ public sealed class MediaDownloadPipeline
                 "image/png" => ".png",
                 _ => ".bin",
             },
+        };
+
+    private static string GuessImageContentType(string extension) =>
+        extension.ToLowerInvariant() switch
+        {
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            _ => "image/jpeg",
         };
 }

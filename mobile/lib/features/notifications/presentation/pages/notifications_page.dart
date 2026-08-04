@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_gradients.dart';
@@ -6,19 +7,19 @@ import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../../../shared/widgets/app_back_button.dart';
 import '../../../../shared/widgets/app_empty_state.dart';
+import '../../domain/models/notification_item.dart';
+import '../providers/notification_providers.dart';
 
-/// In-app notifications list (local / future-ready; no push yet).
+/// In-app notifications list (download completion + account alerts).
 ///
 /// Background matches Home / Library dark glassmorphic gradient scheme.
-class NotificationsPage extends StatelessWidget {
+class NotificationsPage extends ConsumerWidget {
   const NotificationsPage({super.key});
 
-  /// Placeholder for future local/push notification items.
-  static const List<NotificationItem> items = <NotificationItem>[];
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final horizontal = AppBackButton.horizontalInset(context);
+    final asyncItems = ref.watch(notificationsListProvider);
 
     return Scaffold(
       backgroundColor: AppColors.splashBgDeep,
@@ -87,16 +88,49 @@ class NotificationsPage extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: items.isEmpty
-                      ? const Center(
+                  child: asyncItems.when(
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.splashTextPrimary,
+                      ),
+                    ),
+                    error: (error, _) => Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: horizontal),
+                        child: _brandThemed(
+                          context,
                           child: AppEmptyState(
-                            icon: Icons.notifications_none_rounded,
-                            title: 'No notifications yet',
-                            message:
-                                'Download updates and account alerts will show up here.',
+                            icon: Icons.notifications_off_outlined,
+                            title: 'Could not load notifications',
+                            message: error.toString(),
                           ),
-                        )
-                      : ListView.separated(
+                        ),
+                      ),
+                    ),
+                    data: (items) {
+                      if (items.isEmpty) {
+                        return Center(
+                          child: _brandThemed(
+                            context,
+                            child: const AppEmptyState(
+                              icon: Icons.notifications_none_rounded,
+                              title: 'No notifications yet',
+                              message:
+                                  'Download updates and account alerts will show up here.',
+                            ),
+                          ),
+                        );
+                      }
+
+                      return RefreshIndicator(
+                        color: AppColors.splashTextPrimary,
+                        backgroundColor: AppColors.splashBgNavy,
+                        onRefresh: () async {
+                          ref.invalidate(notificationsListProvider);
+                          await ref.read(notificationsListProvider.future);
+                        },
+                        child: ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
                           padding: EdgeInsets.fromLTRB(
                             horizontal,
                             AppSpacing.sm,
@@ -107,10 +141,12 @@ class NotificationsPage extends StatelessWidget {
                           separatorBuilder: (_, _) =>
                               const SizedBox(height: AppSpacing.sm),
                           itemBuilder: (context, index) {
-                            final item = items[index];
-                            return _NotificationTile(item: item);
+                            return _NotificationTile(item: items[index]);
                           },
                         ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -119,23 +155,30 @@ class NotificationsPage extends StatelessWidget {
       ),
     );
   }
-}
 
-/// Future-ready notification model (local store / push payload later).
-class NotificationItem {
-  const NotificationItem({
-    required this.id,
-    required this.title,
-    required this.body,
-    required this.createdAt,
-    this.isRead = false,
-  });
-
-  final String id;
-  final String title;
-  final String body;
-  final DateTime createdAt;
-  final bool isRead;
+  /// Splash/brand colors for empty-state icon (no Material teal seed).
+  static Widget _brandThemed(BuildContext context, {required Widget child}) {
+    final base = Theme.of(context);
+    return Theme(
+      data: base.copyWith(
+        colorScheme: base.colorScheme.copyWith(
+          primary: AppColors.brandPurple,
+          primaryContainer: AppColors.brandPurpleDeep,
+          onSurface: AppColors.splashTextPrimary,
+        ),
+        textTheme: base.textTheme.copyWith(
+          titleMedium: base.textTheme.titleMedium?.copyWith(
+            color: AppColors.splashTextPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+          bodyMedium: base.textTheme.bodyMedium?.copyWith(
+            color: AppColors.splashTextMuted.withValues(alpha: 0.95),
+          ),
+        ),
+      ),
+      child: child,
+    );
+  }
 }
 
 class _NotificationTile extends StatelessWidget {
@@ -160,13 +203,28 @@ class _NotificationTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                item.title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.splashTextPrimary,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      item.title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.splashTextPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    _formatUtcTimestamp(item.createdAt),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.splashTextMuted.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
@@ -181,5 +239,15 @@ class _NotificationTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static String _formatUtcTimestamp(DateTime value) {
+    final utc = value.isUtc ? value : value.toUtc();
+    final y = utc.year.toString().padLeft(4, '0');
+    final m = utc.month.toString().padLeft(2, '0');
+    final d = utc.day.toString().padLeft(2, '0');
+    final hh = utc.hour.toString().padLeft(2, '0');
+    final mm = utc.minute.toString().padLeft(2, '0');
+    return '$y-$m-$d $hh:$mm UTC';
   }
 }

@@ -11,7 +11,7 @@ using SocialReelSaver.Shared.Configuration;
 namespace SocialReelSaver.Infrastructure.Providers;
 
 /// <summary>
-/// Resolves public Instagram/Facebook media via yt-dlp (new client scope: public share → download).
+/// Resolves public Instagram/Facebook media via yt-dlp (public share → download).
 /// Private / login-gated content fails with AccessNotPermitted / MediaNotFound.
 /// </summary>
 public sealed class YtDlpMediaResolver
@@ -56,71 +56,50 @@ public sealed class YtDlpMediaResolver
             : _options.YtDlpExecutablePath.Trim();
 
         var outputPath = _tempFiles.CreateTempFilePath(mediaId, ".mp4");
-        var timeoutSeconds = Math.Clamp(_options.YtDlpTimeoutSeconds, 30, 300);
+        var timeoutSeconds = Math.Clamp(
+            Math.Max(_options.YtDlpTimeoutSeconds, _options.MaximumExecutionSeconds - 15),
+            60,
+            360);
 
         try
         {
-            // Facebook share/reel extraction is slower and often fails when we run
-            // probe+download (two webpage fetches) under the provider budget.
-            // Instagram keeps the existing probe-then-download path unchanged.
-            if (platform == MediaPlatform.Facebook)
-            {
-                return await ResolveFacebookAsync(
-                    executable,
-                    originalUrl,
-                    outputPath,
-                    mediaId,
-                    cancellationToken);
-            }
+            // %(ext)s avoids "no file" when yt-dlp writes a non-mp4 container first.
+            var outputTemplate = Path.Combine(
+                Path.GetDirectoryName(outputPath)!,
+                Path.GetFileNameWithoutExtension(outputPath) + ".%(ext)s");
 
-            // Metadata first (title / availability) without downloading.
-            var probe = await RunYtDlpAsync(
-                executable,
-                [
-                    "--no-playlist",
-                    "--skip-download",
-                    "--dump-single-json",
-                    "--no-warnings",
-                    originalUrl,
-                ],
-                timeoutSeconds,
-                cancellationToken);
+            var format = platform == MediaPlatform.Facebook
+                ? "sd/hd/b[ext=mp4]/best[ext=mp4]/best"
+                : "b[ext=mp4]/best[ext=mp4]/bv*[ext=mp4]+ba[ext=m4a]/best";
 
-            if (!probe.Success)
-            {
-                return MapYtDlpFailure(probe.StdErr, probe.ExitCode);
-            }
+            _logger.LogInformation(
+                "yt-dlp download platform={Platform} media={MediaId} timeout={Timeout}s",
+                platform,
+                mediaId,
+                timeoutSeconds);
 
-            string? title = null;
-            try
-            {
-                using var doc = JsonDocument.Parse(probe.StdOut);
-                title = doc.RootElement.TryGetProperty("title", out var titleProp)
-                    ? titleProp.GetString()
-                    : null;
-                if (string.IsNullOrWhiteSpace(title) &&
-                    doc.RootElement.TryGetProperty("uploader", out var uploaderProp))
-                {
-                    title = uploaderProp.GetString();
-                }
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning(ex, "yt-dlp JSON probe parse failed for media {MediaId}", mediaId);
-            }
-
-            // Download best mp4-compatible stream into worker temp storage.
             var download = await RunYtDlpAsync(
                 executable,
                 [
                     "--no-playlist",
                     "--no-warnings",
                     "-f",
-                    "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best",
+                    format,
                     "--merge-output-format",
                     "mp4",
+                    "--socket-timeout",
+                    "90",
+                    "--retries",
+                    "3",
+                    "--fragment-retries",
+                    "3",
+                    // Title/description for keyword categorization.
+                    "--print",
+                    "after_move:%()j",
+                    // Local thumbnail (jpg/webp/png); pipeline uploads it when present.
+                    "--write-thumbnail",
                     "-o",
-                    outputPath,
+                    outputTemplate,
                     originalUrl,
                 ],
                 timeoutSeconds,
@@ -128,36 +107,65 @@ public sealed class YtDlpMediaResolver
 
             if (!download.Success)
             {
-                await _tempFiles.CleanupAsync(outputPath, CancellationToken.None);
-                return MapYtDlpFailure(download.StdErr, download.ExitCode) with { Title = title };
+                await CleanupOutputsAsync(outputPath, cancellationToken);
+                _logger.LogWarning(
+                    "yt-dlp failed for media {MediaId}: {Stderr}",
+                    mediaId,
+                    Truncate(download.StdErr, 500));
+                return MapYtDlpFailure(download.StdErr, download.ExitCode);
+            }
+
+            var produced = FindProducedMediaFile(outputPath);
+            if (produced is null)
+            {
+                await CleanupOutputsAsync(outputPath, cancellationToken);
+                _logger.LogWarning(
+                    "yt-dlp produced no media file for {MediaId}. stderr={Stderr}",
+                    mediaId,
+                    Truncate(download.StdErr, 400));
+                return ProviderResult.Failed(
+                    ProviderErrorCode.InvalidProviderResponse,
+                    "yt-dlp finished without producing a media file.");
+            }
+
+            if (!string.Equals(produced, outputPath, StringComparison.Ordinal))
+            {
+                if (File.Exists(outputPath))
+                {
+                    File.Delete(outputPath);
+                }
+
+                File.Move(produced, outputPath, overwrite: true);
             }
 
             if (!File.Exists(outputPath) || new FileInfo(outputPath).Length <= 0)
             {
-                await _tempFiles.CleanupAsync(outputPath, CancellationToken.None);
+                await CleanupOutputsAsync(outputPath, cancellationToken);
                 return ProviderResult.Failed(
                     ProviderErrorCode.InvalidProviderResponse,
-                    "yt-dlp finished without producing a media file.") with
-                {
-                    Title = title,
-                };
+                    "yt-dlp finished without producing a media file.");
             }
+
+            var (title, thumbUrl) = ParseMetadata(download.StdOut);
+            var localThumb = FindProducedThumbnail(outputPath);
 
             return ProviderResult.Ok(
                 originalUrl,
                 title: title,
                 mimeType: "video/mp4",
                 extension: ".mp4",
-                localFilePath: outputPath);
+                localFilePath: outputPath,
+                thumbnailSourceUrl: thumbUrl,
+                localThumbnailPath: localThumb);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            await _tempFiles.CleanupAsync(outputPath, CancellationToken.None);
+            await CleanupOutputsAsync(outputPath, CancellationToken.None);
             throw;
         }
         catch (Exception ex) when (ex is FileNotFoundException or System.ComponentModel.Win32Exception)
         {
-            await _tempFiles.CleanupAsync(outputPath, CancellationToken.None);
+            await CleanupOutputsAsync(outputPath, CancellationToken.None);
             _logger.LogError(ex, "yt-dlp executable not available ('{Executable}')", executable);
             return ProviderResult.Failed(
                 ProviderErrorCode.ConfigurationError,
@@ -165,7 +173,7 @@ public sealed class YtDlpMediaResolver
         }
         catch (Exception ex)
         {
-            await _tempFiles.CleanupAsync(outputPath, CancellationToken.None);
+            await CleanupOutputsAsync(outputPath, CancellationToken.None);
             _logger.LogError(ex, "Unexpected yt-dlp failure for media {MediaId}", mediaId);
             return ProviderResult.Failed(
                 ProviderErrorCode.TemporaryFailure,
@@ -173,109 +181,96 @@ public sealed class YtDlpMediaResolver
         }
     }
 
-    /// <summary>
-    /// Facebook-only resolve: one yt-dlp download preferring progressive mp4
-    /// (<c>sd</c>/<c>hd</c>) so we avoid a second webpage fetch and a long AV1 merge.
-    /// </summary>
-    private async Task<ProviderResult> ResolveFacebookAsync(
-        string executable,
-        string originalUrl,
-        string outputPath,
-        Guid mediaId,
-        CancellationToken cancellationToken)
+    private static (string? Title, string? ThumbnailUrl) ParseMetadata(string stdout)
     {
-        // Stay under provider MaximumExecutionSeconds with margin.
-        var fbTimeout = Math.Clamp(
-            Math.Max(_options.YtDlpTimeoutSeconds, _options.MaximumExecutionSeconds - 15),
-            60,
-            Math.Max(60, _options.MaximumExecutionSeconds - 10));
-
-        // yt-dlp replaces %(ext)s; avoids missing files when container/ext differs.
-        var outputTemplate = Path.Combine(
-            Path.GetDirectoryName(outputPath)!,
-            Path.GetFileNameWithoutExtension(outputPath) + ".%(ext)s");
-
-        _logger.LogInformation(
-            "Facebook yt-dlp single-pass download for media {MediaId} timeout={Timeout}s",
-            mediaId,
-            fbTimeout);
-
-        var download = await RunYtDlpAsync(
-            executable,
-            [
-                "--no-playlist",
-                "--no-warnings",
-                // Prefer progressive Facebook streams; sd first so typical reels
-                // finish within the provider execution budget on slow CDNs.
-                "-f",
-                "sd/hd/b[ext=mp4]/best[ext=mp4]/best",
-                "--merge-output-format",
-                "mp4",
-                "--socket-timeout",
-                "90",
-                "--retries",
-                "3",
-                "--fragment-retries",
-                "3",
-                "-o",
-                outputTemplate,
-                originalUrl,
-            ],
-            fbTimeout,
-            cancellationToken);
-
-        if (!download.Success)
+        if (string.IsNullOrWhiteSpace(stdout))
         {
-            await CleanupFacebookOutputsAsync(outputPath, cancellationToken);
-            _logger.LogWarning(
-                "Facebook yt-dlp failed for media {MediaId}: {Stderr}",
-                mediaId,
-                Truncate(download.StdErr, 500));
-            return MapYtDlpFailure(download.StdErr, download.ExitCode);
+            return (null, null);
         }
 
-        var produced = FindProducedFacebookFile(outputPath);
-        if (produced is null)
+        // after_move print may include progress lines; take the last JSON-looking line.
+        string? jsonLine = null;
+        using (var reader = new StringReader(stdout))
         {
-            await CleanupFacebookOutputsAsync(outputPath, cancellationToken);
-            _logger.LogWarning(
-                "Facebook yt-dlp produced no file for media {MediaId}. stderr={Stderr} stdout={Stdout}",
-                mediaId,
-                Truncate(download.StdErr, 400),
-                Truncate(download.StdOut, 200));
-            return ProviderResult.Failed(
-                ProviderErrorCode.InvalidProviderResponse,
-                "yt-dlp finished without producing a media file.");
-        }
-
-        if (!string.Equals(produced, outputPath, StringComparison.Ordinal))
-        {
-            // Normalize to the expected .mp4 path for the rest of the pipeline.
-            if (File.Exists(outputPath))
+            string? line;
+            while ((line = reader.ReadLine()) is not null)
             {
-                File.Delete(outputPath);
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("{", StringComparison.Ordinal) &&
+                    trimmed.EndsWith("}", StringComparison.Ordinal))
+                {
+                    jsonLine = trimmed;
+                }
+            }
+        }
+
+        if (jsonLine is null)
+        {
+            return (null, null);
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(jsonLine);
+            var root = doc.RootElement;
+            string? title = null;
+            if (root.TryGetProperty("title", out var titleProp))
+            {
+                title = titleProp.GetString();
             }
 
-            File.Move(produced, outputPath, overwrite: true);
-        }
+            if (string.IsNullOrWhiteSpace(title) && root.TryGetProperty("fulltitle", out var fullTitle))
+            {
+                title = fullTitle.GetString();
+            }
 
-        if (!File.Exists(outputPath) || new FileInfo(outputPath).Length <= 0)
+            string? description = null;
+            if (root.TryGetProperty("description", out var descProp))
+            {
+                description = descProp.GetString();
+            }
+
+            // Merge title + description so keyword categorization has more signal.
+            var combined = string.Join(
+                " ",
+                new[] { title, description }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            if (combined.Length > 500)
+            {
+                combined = combined[..500];
+            }
+
+            string? thumb = null;
+            if (root.TryGetProperty("thumbnail", out var thumbProp))
+            {
+                thumb = thumbProp.GetString();
+            }
+
+            if (string.IsNullOrWhiteSpace(thumb) &&
+                root.TryGetProperty("thumbnails", out var thumbs) &&
+                thumbs.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var t in thumbs.EnumerateArray().Reverse())
+                {
+                    if (t.TryGetProperty("url", out var u))
+                    {
+                        thumb = u.GetString();
+                        if (!string.IsNullOrWhiteSpace(thumb))
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return (string.IsNullOrWhiteSpace(combined) ? null : combined, thumb);
+        }
+        catch (JsonException)
         {
-            await CleanupFacebookOutputsAsync(outputPath, cancellationToken);
-            return ProviderResult.Failed(
-                ProviderErrorCode.InvalidProviderResponse,
-                "yt-dlp finished without producing a media file.");
+            return (null, null);
         }
-
-        return ProviderResult.Ok(
-            originalUrl,
-            title: null,
-            mimeType: "video/mp4",
-            extension: ".mp4",
-            localFilePath: outputPath);
     }
 
-    private static string? FindProducedFacebookFile(string expectedMp4Path)
+    private static string? FindProducedMediaFile(string expectedMp4Path)
     {
         if (File.Exists(expectedMp4Path) && new FileInfo(expectedMp4Path).Length > 0)
         {
@@ -289,14 +284,42 @@ public sealed class YtDlpMediaResolver
             return null;
         }
 
+        var mediaExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".mp4", ".mkv", ".webm", ".mov", ".m4a", ".mp3",
+        };
+
         return Directory.EnumerateFiles(dir, stem + ".*")
             .Where(path => !path.EndsWith(".part", StringComparison.OrdinalIgnoreCase))
+            .Where(path => mediaExts.Contains(Path.GetExtension(path)))
             .Where(path => new FileInfo(path).Length > 0)
             .OrderByDescending(path => new FileInfo(path).Length)
             .FirstOrDefault();
     }
 
-    private async Task CleanupFacebookOutputsAsync(string expectedMp4Path, CancellationToken cancellationToken)
+    private static string? FindProducedThumbnail(string expectedMp4Path)
+    {
+        var dir = Path.GetDirectoryName(expectedMp4Path);
+        var stem = Path.GetFileNameWithoutExtension(expectedMp4Path);
+        if (string.IsNullOrWhiteSpace(dir) || string.IsNullOrWhiteSpace(stem))
+        {
+            return null;
+        }
+
+        var thumbExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg", ".jpeg", ".png", ".webp",
+        };
+
+        return Directory.EnumerateFiles(dir, stem + ".*")
+            .Where(path => thumbExts.Contains(Path.GetExtension(path)))
+            .Where(path => new FileInfo(path).Length > 0)
+            .OrderByDescending(path => path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(path => new FileInfo(path).Length)
+            .FirstOrDefault();
+    }
+
+    private async Task CleanupOutputsAsync(string expectedMp4Path, CancellationToken cancellationToken)
     {
         await _tempFiles.CleanupAsync(expectedMp4Path, cancellationToken);
         var dir = Path.GetDirectoryName(expectedMp4Path);
@@ -403,7 +426,11 @@ public sealed class YtDlpMediaResolver
         var path = uri.AbsolutePath.TrimEnd('/');
         if (platform == MediaPlatform.Instagram)
         {
-            return Regex.IsMatch(path, @"^/(reel|p|tv)/[^/]+$", RegexOptions.IgnoreCase);
+            // reel / reels / p / tv / share links from share sheet & copy link.
+            return Regex.IsMatch(
+                path,
+                @"^/(reel|reels|p|tv|share)/[^/]+",
+                RegexOptions.IgnoreCase);
         }
 
         if (Regex.IsMatch(path, @"^/(reel|reels|videos|watch|share/v|share/r)/", RegexOptions.IgnoreCase))
@@ -411,7 +438,6 @@ public sealed class YtDlpMediaResolver
             return true;
         }
 
-        // Generic /share/{id}/ short links used by the Facebook share sheet.
         if (Regex.IsMatch(path, @"^/share/[^/]+$", RegexOptions.IgnoreCase))
         {
             return true;

@@ -33,7 +33,8 @@ try
     builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddJwtAuthentication(builder.Configuration, builder.Environment);
 
-    // Downloads run in SocialReelSaver.Worker only — API enqueues Redis jobs and returns.
+    // Process Queued download jobs in-process (yt-dlp → Downloading → Completed).
+    builder.Services.AddHostedService<SocialReelSaver.Infrastructure.Workers.MediaDownloadWorker>();
 
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();

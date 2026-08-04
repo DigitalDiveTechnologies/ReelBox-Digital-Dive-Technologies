@@ -79,7 +79,9 @@ public static class KeywordCategoryClassifier
         ("Automotive",
         [
             "car", "cars", "auto", "automotive", "vehicle", "motorcycle", "bike review",
-            "ev car",
+            "ev car", "supercar", "hypercar", "drift", "bmw", "mercedes", "audi", "toyota",
+            "honda", "ferrari", "lamborghini", "porsche", "mustang", "tesla", "racing",
+            "offroad", "off-road", "suv", "pickup truck",
         ]),
         ("News",
         [

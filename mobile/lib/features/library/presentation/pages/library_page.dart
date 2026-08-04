@@ -97,11 +97,35 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                center: const Alignment(0.85, -0.95),
-                radius: 1.0,
+                center: const Alignment(-0.85, -0.95),
+                radius: 0.95,
                 colors: [
-                  AppColors.splashBgMahogany.withValues(alpha: 0.55),
+                  AppColors.splashBgMahogany.withValues(alpha: 0.5),
                   AppColors.splashBgMahogany.withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0.9, -0.7),
+                radius: 0.9,
+                colors: [
+                  AppColors.brandPurple.withValues(alpha: 0.18),
+                  AppColors.brandPurple.withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0.6, 0.95),
+                radius: 0.85,
+                colors: [
+                  AppColors.splashBgNavy.withValues(alpha: 0.55),
+                  AppColors.splashBgNavy.withValues(alpha: 0),
                 ],
               ),
             ),
@@ -159,12 +183,15 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
                             color: AppColors.splashTextPrimary,
                           ),
                         ),
-                        error: (error, _) => AppEmptyState(
-                          icon: Icons.cloud_off_outlined,
-                          title: 'Could not load library',
-                          message: error is AppException
-                              ? error.message
-                              : 'Check your connection and try again.',
+                        error: (error, _) => _brandThemed(
+                          context,
+                          child: AppEmptyState(
+                            icon: Icons.cloud_off_outlined,
+                            title: 'Could not load library',
+                            message: error is AppException
+                                ? error.message
+                                : 'Check your connection and try again.',
+                          ),
                         ),
                         data: (allItems) {
                           final items = _filtered(allItems);
@@ -175,13 +202,16 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
                               onRefresh: _refresh,
                               child: ListView(
                                 physics: const AlwaysScrollableScrollPhysics(),
-                                children: const [
-                                  SizedBox(height: 120),
-                                  AppEmptyState(
-                                    icon: Icons.video_library_outlined,
-                                    title: 'No media found',
-                                    message:
-                                        'Saved reels appear here. Adjust filters, or save a new URL from Home.',
+                                children: [
+                                  const SizedBox(height: 120),
+                                  _brandThemed(
+                                    context,
+                                    child: const AppEmptyState(
+                                      icon: Icons.video_library_outlined,
+                                      title: 'No media found',
+                                      message:
+                                          'Saved reels appear here. Adjust filters, or save a new URL from Home.',
+                                    ),
                                   ),
                                 ],
                               ),
@@ -230,6 +260,30 @@ class _LibraryPageState extends ConsumerState<LibraryPage>
           ),
         ],
       ),
+    );
+  }
+
+  /// Splash/brand colors for empty-state icon (no Material teal seed).
+  static Widget _brandThemed(BuildContext context, {required Widget child}) {
+    final base = Theme.of(context);
+    return Theme(
+      data: base.copyWith(
+        colorScheme: base.colorScheme.copyWith(
+          primary: AppColors.brandPurple,
+          primaryContainer: AppColors.brandPurpleDeep,
+          onSurface: AppColors.splashTextPrimary,
+        ),
+        textTheme: base.textTheme.copyWith(
+          titleMedium: base.textTheme.titleMedium?.copyWith(
+            color: AppColors.splashTextPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+          bodyMedium: base.textTheme.bodyMedium?.copyWith(
+            color: AppColors.splashTextMuted.withValues(alpha: 0.95),
+          ),
+        ),
+      ),
+      child: child,
     );
   }
 }

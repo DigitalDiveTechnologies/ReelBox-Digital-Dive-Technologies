@@ -76,6 +76,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditLogWriter, AuditLogWriter>();
         services.AddScoped<IAdminMetricsReader, AdminMetricsReader>();
         services.AddScoped<IMediaRepository, MediaRepository>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();
         services.AddScoped<IAppErrorLogRepository, AppErrorLogRepository>();
         services.AddScoped<IAppErrorLogWriter, AppErrorLogWriter>();

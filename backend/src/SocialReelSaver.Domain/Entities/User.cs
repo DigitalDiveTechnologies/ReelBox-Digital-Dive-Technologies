@@ -35,4 +35,6 @@ public sealed class User
     public DateTimeOffset UpdatedAt { get; set; }
 
     public ICollection<MediaItem> MediaItems { get; set; } = new List<MediaItem>();
+
+    public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 }
