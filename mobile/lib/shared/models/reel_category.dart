@@ -19,7 +19,7 @@ class ReelCategory {
     (label: 'Motivation', value: 'Motivation'),
     (label: 'Entertainment', value: 'Entertainment'),
     (label: 'Sports', value: 'Sports'),
-    (label: 'Gaming', value: 'Gaming'),
+    (label: 'Games', value: 'Games'),
     (label: 'Beauty', value: 'Beauty'),
     (label: 'Pets', value: 'Pets'),
     (label: 'Automotive', value: 'Automotive'),

@@ -42,7 +42,6 @@ public static class DependencyInjection
         services.Configure<DownloadOptions>(configuration.GetSection(DownloadOptions.SectionName));
         services.Configure<ProvidersOptions>(configuration.GetSection(ProvidersOptions.SectionName));
         services.Configure<RapidApiOptions>(configuration.GetSection(RapidApiOptions.SectionName));
-        services.Configure<GeminiOptions>(configuration.GetSection(GeminiOptions.SectionName));
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<AdminJwtOptions>(configuration.GetSection(AdminJwtOptions.SectionName));
         services.Configure<AdminBootstrapOptions>(configuration.GetSection(AdminBootstrapOptions.SectionName));
@@ -93,16 +92,8 @@ public static class DependencyInjection
         services.AddSingleton<IRetryPolicy, ExponentialBackoffRetryPolicy>();
         services.AddScoped<MediaDownloadPipeline>();
         services.AddSingleton<IMediaCategorizationQueue, MediaCategorizationQueue>();
-        services.AddScoped<IMediaCategorizationService, GeminiMediaCategorizationService>();
-        services.AddHttpClient(GeminiMediaCategorizationService.HttpClientName, (sp, client) =>
-        {
-            var opts = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
-            var baseUrl = string.IsNullOrWhiteSpace(opts.BaseUrl)
-                ? "https://generativelanguage.googleapis.com/v1beta"
-                : opts.BaseUrl.TrimEnd('/');
-            client.BaseAddress = new Uri(baseUrl + "/");
-            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(opts.TimeoutSeconds, 5, 60));
-        });
+        // Keyword engine now; swap implementation for Gemini/OpenAI later without contract changes.
+        services.AddScoped<IMediaCategorizationService, KeywordMediaCategorizationService>();
 
         services.AddHttpClient(MetaGraphMediaResolver.HttpClientName, (sp, client) =>
         {

@@ -1,7 +1,7 @@
 namespace SocialReelSaver.Domain.Media;
 
 /// <summary>
-/// Predefined reel categories for AI classification (single label per item).
+/// Predefined reel categories for classification (single label per item).
 /// </summary>
 public static class MediaCategories
 {
@@ -21,7 +21,7 @@ public static class MediaCategories
         "Motivation",
         "Entertainment",
         "Sports",
-        "Gaming",
+        "Games",
         "Beauty",
         "Pets",
         "Automotive",
@@ -47,6 +47,12 @@ public static class MediaCategories
             .Replace("\r", string.Empty)
             .Replace("\n", string.Empty)
             .Trim();
+
+        // Legacy label from earlier AI list.
+        if (string.Equals(cleaned, "Gaming", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Games";
+        }
 
         foreach (var category in All)
         {

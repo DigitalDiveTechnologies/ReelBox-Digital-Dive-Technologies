@@ -10,7 +10,7 @@ namespace SocialReelSaver.Infrastructure.Workers;
 
 /// <summary>
 /// Background consumer for media download jobs (SRS §11 / §19).
-/// Also drains AI categorization jobs after downloads complete (non-blocking).
+/// Also drains categorization jobs after downloads complete (non-blocking).
 /// </summary>
 public sealed class MediaDownloadWorker : BackgroundService
 {

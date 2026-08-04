@@ -65,6 +65,7 @@ public sealed class MediaDownloadPipelineTests
                     MaxBackoffSeconds = 60,
                 })),
                 publisher,
+                new MediaCategorizationQueue(),
                 storageOptions,
                 NullLogger<MediaDownloadPipeline>.Instance);
 
@@ -185,6 +186,7 @@ public sealed class MediaDownloadPipelineTests
                 tempFiles,
                 retry,
                 publisher,
+                new MediaCategorizationQueue(),
                 storageOptions,
                 NullLogger<MediaDownloadPipeline>.Instance);
 
@@ -244,9 +246,10 @@ public sealed class MediaDownloadPipelineTests
                 BaseBackoffSeconds = 1,
                 MaxBackoffSeconds = 10,
             })),
-            publisher,
-            storageOptions,
-            NullLogger<MediaDownloadPipeline>.Instance);
+                publisher,
+                new MediaCategorizationQueue(),
+                storageOptions,
+                NullLogger<MediaDownloadPipeline>.Instance);
     }
 
     internal static IMediaProviderExecutor CreateExecutor(
