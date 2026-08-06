@@ -237,9 +237,27 @@ namespace SocialReelSaver.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("category");
 
+                    b.Property<double?>("CategoryConfidence")
+                        .HasColumnType("double precision")
+                        .HasColumnName("category_confidence");
+
+                    b.Property<string>("ClassificationSource")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("classification_source");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("CreatorUsername")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("creator_username");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
                     b.Property<DateTimeOffset?>("DownloadStartedAt")
                         .HasColumnType("timestamp with time zone")
@@ -269,6 +287,10 @@ namespace SocialReelSaver.Infrastructure.Persistence.Migrations
                     b.Property<string>("MediaStorageKey")
                         .HasColumnType("text")
                         .HasColumnName("media_storage_key");
+
+                    b.Property<string>("MetadataText")
+                        .HasColumnType("text")
+                        .HasColumnName("metadata_text");
 
                     b.Property<string>("MimeType")
                         .HasMaxLength(127)

@@ -121,7 +121,8 @@ public sealed class LocalObjectStorageService : IObjectStorageService
             FileAccess.Read,
             FileShare.Read,
             bufferSize: 81_920,
-            options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+            // RandomAccess so HTTP Range / Android ExoPlayer can seek within the file.
+            options: FileOptions.Asynchronous | FileOptions.RandomAccess);
         return Task.FromResult<Stream?>(stream);
     }
 
@@ -205,7 +206,7 @@ public sealed class LocalObjectStorageService : IObjectStorageService
 
         try
         {
-            var root = Path.GetFullPath(_options.LocalRootPath);
+            var root = LocalStoragePath.Resolve(_options.LocalRootPath);
             Directory.CreateDirectory(root);
 
             var probe = Path.Combine(root, $".health-{Guid.NewGuid():N}");
@@ -336,11 +337,12 @@ public sealed class LocalObjectStorageService : IObjectStorageService
 
     private string ResolvePath(string key)
     {
-        var root = Path.GetFullPath(_options.LocalRootPath);
+        var root = LocalStoragePath.Resolve(_options.LocalRootPath);
         Directory.CreateDirectory(root);
         var safeKey = key.Replace('\\', '/').TrimStart('/');
         var combined = Path.GetFullPath(Path.Combine(root, safeKey.Replace('/', Path.DirectorySeparatorChar)));
-        if (!combined.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        if (!combined.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(combined, root, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Object storage key escapes the configured local root.");
         }

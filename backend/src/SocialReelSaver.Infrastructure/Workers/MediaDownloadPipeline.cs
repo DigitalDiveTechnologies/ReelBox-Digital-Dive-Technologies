@@ -108,6 +108,26 @@ public sealed class MediaDownloadPipeline
                 item.Title = resolution.Title;
             }
 
+            if (!string.IsNullOrWhiteSpace(resolution.Description))
+            {
+                item.Description = resolution.Description;
+            }
+
+            if (!string.IsNullOrWhiteSpace(resolution.Uploader))
+            {
+                item.CreatorUsername = resolution.Uploader;
+            }
+
+            if (!string.IsNullOrWhiteSpace(resolution.MetadataText))
+            {
+                item.MetadataText = resolution.MetadataText;
+            }
+            else if (!string.IsNullOrWhiteSpace(resolution.LocalFilePath))
+            {
+                // Filename tokens help when provider tags are empty.
+                item.MetadataText = Path.GetFileNameWithoutExtension(resolution.LocalFilePath);
+            }
+
             if (!resolution.Success ||
                 (string.IsNullOrWhiteSpace(resolution.ResolvedSourceUrl) &&
                  string.IsNullOrWhiteSpace(resolution.LocalFilePath)))

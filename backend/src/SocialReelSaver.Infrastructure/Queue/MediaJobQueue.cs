@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SocialReelSaver.Application.Abstractions.Queue;
 using SocialReelSaver.Application.Media.Jobs;
@@ -11,16 +12,31 @@ namespace SocialReelSaver.Infrastructure.Queue;
 public sealed class MediaJobPublisher : IMediaJobPublisher
 {
     private readonly IMediaJobQueue _queue;
+    private readonly WorkerOptions _options;
+    private readonly ILogger<MediaJobPublisher> _logger;
 
-    public MediaJobPublisher(IMediaJobQueue queue)
+    public MediaJobPublisher(
+        IMediaJobQueue queue,
+        IOptions<WorkerOptions> options,
+        ILogger<MediaJobPublisher> logger)
     {
         _queue = queue;
+        _options = options.Value;
+        _logger = logger;
     }
 
-    public Task PublishDownloadJobAsync(
+    public async Task PublishDownloadJobAsync(
         MediaDownloadJob job,
-        CancellationToken cancellationToken = default) =>
-        _queue.PublishAsync(job, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        await _queue.PublishAsync(job, cancellationToken);
+        _logger.LogInformation(
+            "Published download job {JobId} for media {MediaId} to {QueueName} via {QueueType}",
+            job.JobId,
+            job.MediaId,
+            _options.QueueName,
+            _queue.GetType().Name);
+    }
 }
 
 public sealed class MediaJobConsumer : IMediaJobConsumer

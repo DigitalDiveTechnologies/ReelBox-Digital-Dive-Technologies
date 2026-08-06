@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -10,18 +11,47 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using SocialReelSaver.Application.Abstractions.Email;
 using SocialReelSaver.Application.Auth.DTOs;
 using SocialReelSaver.Infrastructure.Persistence;
 
 namespace SocialReelSaver.Tests.Authentication;
 
+/// <summary>
+/// Captures signup OTP from outbound mail so integration tests can complete verify-email.
+/// </summary>
+public sealed class CapturingEmailService : IEmailService
+{
+    private static readonly Regex OtpPattern = new(@"\b(\d{6})\b", RegexOptions.Compiled);
+
+    public string? LastOtp { get; private set; }
+
+    public Task SendAsync(
+        string toEmail,
+        string subject,
+        string htmlBody,
+        string? plainTextBody,
+        CancellationToken cancellationToken = default)
+    {
+        var source = plainTextBody ?? htmlBody;
+        var match = OtpPattern.Match(source);
+        LastOtp = match.Success ? match.Groups[1].Value : null;
+        return Task.CompletedTask;
+    }
+}
+
 public sealed class AuthApiFactory : WebApplicationFactory<Program>
 {
     private readonly string _dbName = $"auth-tests-{Guid.NewGuid()}";
+    public CapturingEmailService Email { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+        // Highest-priority overrides so appsettings Redis defaults do not force a live Redis in tests.
+        builder.UseSetting("Worker:UseInMemoryQueue", "true");
+        builder.UseSetting("Redis:ConnectionString", "");
+        builder.UseSetting("ConnectionStrings:Redis", "");
 
         builder.ConfigureAppConfiguration((_, config) =>
         {
@@ -33,9 +63,9 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["Jwt:AccessTokenExpirationMinutes"] = "15",
                 ["Jwt:RefreshTokenExpirationDays"] = "7",
                 ["Database:ConnectionString"] = "Host=localhost;Database=test;Username=test;Password=test",
-                ["Redis:ConnectionString"] = "localhost:6379",
+                ["Redis:ConnectionString"] = "",
                 ["ConnectionStrings:PostgreSQL"] = "Host=localhost;Database=test;Username=test;Password=test",
-                ["ConnectionStrings:Redis"] = "localhost:6379",
+                ["ConnectionStrings:Redis"] = "",
                 ["Worker:UseInMemoryQueue"] = "true",
                 ["Worker:MaxRetries"] = "3",
                 ["Worker:BaseBackoffSeconds"] = "1",
@@ -45,6 +75,8 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
                 ["Download:TempFolder"] = Path.Combine(Path.GetTempPath(), "srs-test-temp"),
                 ["Download:TimeoutSeconds"] = "30",
                 ["Download:MaxFileSizeBytes"] = "1048576",
+                ["Smtp:Host"] = "",
+                ["Smtp:Password"] = "",
             });
         });
 
@@ -54,6 +86,9 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
 
             services.AddDbContext<AppDbContext>(options =>
                 options.UseInMemoryDatabase(_dbName));
+
+            services.RemoveAll<IEmailService>();
+            services.AddSingleton<IEmailService>(Email);
         });
     }
 
@@ -82,6 +117,7 @@ public sealed class AuthApiFactory : WebApplicationFactory<Program>
 
 public sealed class AuthApiIntegrationTests : IClassFixture<AuthApiFactory>
 {
+    private readonly AuthApiFactory _factory;
     private readonly HttpClient _client;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -90,7 +126,27 @@ public sealed class AuthApiIntegrationTests : IClassFixture<AuthApiFactory>
 
     public AuthApiIntegrationTests(AuthApiFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
+    }
+
+    private async Task<AuthResponse> RegisterAndVerifyAsync(string email, string password)
+    {
+        var registerResponse = await _client.PostAsJsonAsync(
+            "/api/v1/auth/register",
+            new RegisterRequest(email, password));
+        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
+
+        Assert.False(string.IsNullOrWhiteSpace(_factory.Email.LastOtp));
+
+        var verifyResponse = await _client.PostAsJsonAsync(
+            "/api/v1/auth/verify-email",
+            new VerifyEmailRequest(email, _factory.Email.LastOtp!));
+        Assert.Equal(HttpStatusCode.OK, verifyResponse.StatusCode);
+
+        var auth = await verifyResponse.Content.ReadFromJsonAsync<AuthResponse>(JsonOptions);
+        Assert.NotNull(auth);
+        return auth;
     }
 
     [Fact]
@@ -99,13 +155,7 @@ public sealed class AuthApiIntegrationTests : IClassFixture<AuthApiFactory>
         var email = $"user_{Guid.NewGuid():N}@example.com";
         const string password = "SecurePass1";
 
-        var registerResponse = await _client.PostAsJsonAsync(
-            "/api/v1/auth/register",
-            new RegisterRequest(email, password));
-
-        Assert.Equal(HttpStatusCode.Created, registerResponse.StatusCode);
-        var registered = await registerResponse.Content.ReadFromJsonAsync<AuthResponse>(JsonOptions);
-        Assert.NotNull(registered);
+        var registered = await RegisterAndVerifyAsync(email, password);
         Assert.Equal(email, registered.User.Email);
         Assert.False(string.IsNullOrWhiteSpace(registered.Tokens.AccessToken));
         Assert.False(string.IsNullOrWhiteSpace(registered.Tokens.RefreshToken));
@@ -161,8 +211,7 @@ public sealed class AuthApiIntegrationTests : IClassFixture<AuthApiFactory>
         var email = $"dup_{Guid.NewGuid():N}@example.com";
         const string password = "SecurePass1";
 
-        var first = await _client.PostAsJsonAsync("/api/v1/auth/register", new RegisterRequest(email, password));
-        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        await RegisterAndVerifyAsync(email, password);
 
         var second = await _client.PostAsJsonAsync("/api/v1/auth/register", new RegisterRequest(email, password));
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
@@ -174,8 +223,7 @@ public sealed class AuthApiIntegrationTests : IClassFixture<AuthApiFactory>
         var email = $"login_{Guid.NewGuid():N}@example.com";
         const string password = "SecurePass1";
 
-        var register = await _client.PostAsJsonAsync("/api/v1/auth/register", new RegisterRequest(email, password));
-        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+        await RegisterAndVerifyAsync(email, password);
 
         var login = await _client.PostAsJsonAsync(
             "/api/v1/auth/login",

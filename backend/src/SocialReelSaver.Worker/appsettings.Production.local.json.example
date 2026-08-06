@@ -1,0 +1,34 @@
+{
+  "_comment": "Copy to appsettings.Production.local.json next to SocialReelSaver.Worker.dll. Same Neon + Redis as API.",
+  "ConnectionStrings": {
+    "PostgreSQL": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;SSL Mode=Require;Trust Server Certificate=true",
+    "Redis": "localhost:6379"
+  },
+  "Database": {
+    "ConnectionString": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;SSL Mode=Require;Trust Server Certificate=true"
+  },
+  "Redis": {
+    "ConnectionString": "localhost:6379"
+  },
+  "Storage": {
+    "LocalDirectory": "C:\\ReelBox\\storage"
+  },
+  "ObjectStorage": {
+    "Provider": "Local",
+    "LocalRootPath": "C:\\ReelBox\\storage",
+    "PublicApiBaseUrl": "http://157.254.225.131:8080",
+    "PlaybackSigningKey": "SAME_AS_API_PLAYBACK_SIGNING_KEY"
+  },
+  "Providers": {
+    "Resolver": "YtDlp",
+    "YtDlpExecutablePath": "yt-dlp"
+  },
+  "Ffmpeg": {
+    "ExecutablePath": "ffmpeg"
+  },
+  "Worker": {
+    "UseInMemoryQueue": false,
+    "QueueName": "media-download-jobs",
+    "StuckJobTimeoutMinutes": 15
+  }
+}

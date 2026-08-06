@@ -1,9 +1,14 @@
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Options;
 using Serilog;
 using SocialReelSaver.Api.Extensions;
 using SocialReelSaver.Api.Middleware;
 using SocialReelSaver.Application;
 using SocialReelSaver.Infrastructure;
+using SocialReelSaver.Infrastructure.Storage;
+using SocialReelSaver.Shared.Configuration;
 
 try
 {
@@ -33,8 +38,16 @@ try
     builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddJwtAuthentication(builder.Configuration, builder.Environment);
 
-    // Process Queued download jobs in-process (yt-dlp → Downloading → Completed).
-    builder.Services.AddHostedService<SocialReelSaver.Infrastructure.Workers.MediaDownloadWorker>();
+    // In-process download consumer: Development convenience only.
+    // Production VPS must run SocialReelSaver.Worker as the sole Redis consumer
+    // (Worker:RunInApiHost defaults to true in Development, false otherwise).
+    var runInApiHost = builder.Configuration.GetValue(
+        "Worker:RunInApiHost",
+        defaultValue: builder.Environment.IsDevelopment());
+    if (runInApiHost)
+    {
+        builder.Services.AddHostedService<SocialReelSaver.Infrastructure.Workers.MediaDownloadWorker>();
+    }
 
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
@@ -59,6 +72,29 @@ try
 
     var app = builder.Build();
 
+    if (runInApiHost)
+    {
+        Log.Information("API host registered MediaDownloadWorker (Worker:RunInApiHost=true)");
+    }
+    else
+    {
+        Log.Information(
+            "API host will not consume download jobs; use SocialReelSaver.Worker (Worker:RunInApiHost=false)");
+    }
+
+    {
+        var redis = app.Configuration["Redis:ConnectionString"]
+            ?? app.Configuration.GetConnectionString("Redis")
+            ?? string.Empty;
+        var useInMemory = app.Configuration.GetValue("Worker:UseInMemoryQueue", false);
+        var queueName = app.Configuration["Worker:QueueName"] ?? "media-download-jobs";
+        Log.Information(
+            "Download job queue: UseInMemory={UseInMemory} RedisConfigured={RedisConfigured} QueueName={QueueName}",
+            useInMemory,
+            !string.IsNullOrWhiteSpace(redis),
+            queueName);
+    }
+
     // SMTP startup diagnostics (never log password values).
     {
         var smtp = app.Configuration.GetSection("Smtp");
@@ -81,6 +117,36 @@ try
     app.UseForwardedHeaders();
     app.UseMiddleware<ExceptionHandlingMiddleware>();
     app.UseSerilogRequestLogging();
+
+    // Shared local media root (videos + thumbnails). Same path as Worker ObjectStorage/Storage config.
+    {
+        var storageOptions = app.Services.GetRequiredService<IOptions<ObjectStorageOptions>>().Value;
+        var storageRoot = LocalStoragePath.Resolve(storageOptions.LocalRootPath);
+        Directory.CreateDirectory(storageRoot);
+        Log.Information("Local media storage root: {StorageRoot}", storageRoot);
+
+        var contentTypes = new FileExtensionContentTypeProvider();
+        contentTypes.Mappings[".mp4"] = "video/mp4";
+        contentTypes.Mappings[".webm"] = "video/webm";
+        contentTypes.Mappings[".mov"] = "video/quicktime";
+        contentTypes.Mappings[".jpg"] = "image/jpeg";
+        contentTypes.Mappings[".jpeg"] = "image/jpeg";
+        contentTypes.Mappings[".png"] = "image/png";
+        contentTypes.Mappings[".webp"] = "image/webp";
+
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(storageRoot),
+            RequestPath = "/storage",
+            ContentTypeProvider = contentTypes,
+            ServeUnknownFileTypes = false,
+            // Android / browsers need byte-range support for progressive MP4 playback.
+            OnPrepareResponse = ctx =>
+            {
+                ctx.Context.Response.Headers.AcceptRanges = "bytes";
+            },
+        });
+    }
 
     if (app.Environment.IsDevelopment())
     {

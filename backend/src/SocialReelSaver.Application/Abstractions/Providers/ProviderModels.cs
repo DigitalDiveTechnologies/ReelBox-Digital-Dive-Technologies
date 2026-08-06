@@ -107,6 +107,13 @@ public sealed record ProviderResult
 
     public string? Title { get; init; }
 
+    public string? Description { get; init; }
+
+    public string? Uploader { get; init; }
+
+    /// <summary>Joined tags/categories/track/filename and other yt-dlp text fields.</summary>
+    public string? MetadataText { get; init; }
+
     public string? SuggestedMimeType { get; init; }
 
     public string? SuggestedExtension { get; init; }
@@ -132,7 +139,10 @@ public sealed record ProviderResult
         long? durationMs = null,
         string? localFilePath = null,
         string? thumbnailSourceUrl = null,
-        string? localThumbnailPath = null) => new()
+        string? localThumbnailPath = null,
+        string? description = null,
+        string? uploader = null,
+        string? metadataText = null) => new()
     {
         Success = true,
         ResolvedSourceUrl = resolvedSourceUrl,
@@ -140,6 +150,9 @@ public sealed record ProviderResult
         ThumbnailSourceUrl = thumbnailSourceUrl,
         LocalThumbnailPath = localThumbnailPath,
         Title = title,
+        Description = description,
+        Uploader = uploader,
+        MetadataText = metadataText,
         SuggestedMimeType = mimeType,
         SuggestedExtension = extension,
         SuggestedDurationMs = durationMs,

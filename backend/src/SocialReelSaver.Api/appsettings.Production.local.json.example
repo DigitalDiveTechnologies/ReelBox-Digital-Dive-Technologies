@@ -1,17 +1,22 @@
 {
-  "_comment": "Copy to appsettings.Production.local.json (gitignored). Upload that file with publish output. Never commit real secrets.",
+  "_comment": "Copy to appsettings.Production.local.json next to the published DLL. API + Worker must share Redis + Neon + storage.",
   "ConnectionStrings": {
     "PostgreSQL": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;SSL Mode=Require;Trust Server Certificate=true",
-    "Redis": "YOUR_REDIS_HOST:6379"
+    "Redis": "localhost:6379"
   },
   "Database": {
     "ConnectionString": "Host=YOUR_NEON_HOST;Database=neondb;Username=neondb_owner;Password=YOUR_PASSWORD;Port=5432;SSL Mode=Require;Trust Server Certificate=true"
   },
   "Redis": {
-    "ConnectionString": "YOUR_REDIS_HOST:6379"
+    "ConnectionString": "localhost:6379"
+  },
+  "Storage": {
+    "LocalDirectory": "C:\\ReelBox\\storage"
   },
   "ObjectStorage": {
-    "PublicApiBaseUrl": "https://YOUR-API-HOST",
+    "Provider": "Local",
+    "LocalRootPath": "C:\\ReelBox\\storage",
+    "PublicApiBaseUrl": "http://157.254.225.131:8080",
     "PlaybackSigningKey": "REPLACE_WITH_LONG_RANDOM_PLAYBACK_SIGNING_KEY"
   },
   "Jwt": {
@@ -41,6 +46,8 @@
   },
   "Worker": {
     "UseInMemoryQueue": false,
+    "RunInApiHost": false,
+    "QueueName": "media-download-jobs",
     "StuckJobTimeoutMinutes": 15
   }
 }

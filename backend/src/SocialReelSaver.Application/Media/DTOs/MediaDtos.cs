@@ -26,7 +26,9 @@ public sealed record MediaResponse(
     string? ErrorMessage,
     int RetryCount,
     string? Source,
-    string? ThumbnailUrl = null);
+    string? ThumbnailUrl = null,
+    double? CategoryConfidence = null,
+    string? ClassificationSource = null);
 
 public sealed record MediaListResponse(
     IReadOnlyList<MediaResponse> Items,

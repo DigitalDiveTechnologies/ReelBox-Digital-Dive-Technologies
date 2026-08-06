@@ -31,6 +31,7 @@
   },
   "Worker": {
     "UseInMemoryQueue": false,
+    "RunInApiHost": true,
     "StuckJobTimeoutMinutes": 15
   }
 }

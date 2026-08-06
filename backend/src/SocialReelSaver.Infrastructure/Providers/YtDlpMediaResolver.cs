@@ -146,17 +146,20 @@ public sealed class YtDlpMediaResolver
                     "yt-dlp finished without producing a media file.");
             }
 
-            var (title, thumbUrl) = ParseMetadata(download.StdOut);
+            var meta = ParseMetadata(download.StdOut);
             var localThumb = FindProducedThumbnail(outputPath);
 
             return ProviderResult.Ok(
                 originalUrl,
-                title: title,
+                title: meta.Title,
                 mimeType: "video/mp4",
                 extension: ".mp4",
                 localFilePath: outputPath,
-                thumbnailSourceUrl: thumbUrl,
-                localThumbnailPath: localThumb);
+                thumbnailSourceUrl: meta.ThumbnailUrl,
+                localThumbnailPath: localThumb,
+                description: meta.Description,
+                uploader: meta.Uploader,
+                metadataText: meta.MetadataText);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -181,11 +184,18 @@ public sealed class YtDlpMediaResolver
         }
     }
 
-    private static (string? Title, string? ThumbnailUrl) ParseMetadata(string stdout)
+    private sealed record YtDlpParsedMetadata(
+        string? Title,
+        string? Description,
+        string? Uploader,
+        string? MetadataText,
+        string? ThumbnailUrl);
+
+    private static YtDlpParsedMetadata ParseMetadata(string stdout)
     {
         if (string.IsNullOrWhiteSpace(stdout))
         {
-            return (null, null);
+            return new YtDlpParsedMetadata(null, null, null, null, null);
         }
 
         // after_move print may include progress lines; take the last JSON-looking line.
@@ -206,69 +216,132 @@ public sealed class YtDlpMediaResolver
 
         if (jsonLine is null)
         {
-            return (null, null);
+            return new YtDlpParsedMetadata(null, null, null, null, null);
         }
 
         try
         {
             using var doc = JsonDocument.Parse(jsonLine);
             var root = doc.RootElement;
-            string? title = null;
-            if (root.TryGetProperty("title", out var titleProp))
+
+            var title = GetString(root, "title") ?? GetString(root, "fulltitle");
+            var description = GetString(root, "description") ?? GetString(root, "summary");
+            var uploader = FirstNonEmpty(
+                GetString(root, "uploader"),
+                GetString(root, "channel"),
+                GetString(root, "creator"),
+                GetString(root, "uploader_id"),
+                GetString(root, "channel_id"),
+                GetString(root, "artist"));
+
+            var extras = new List<string>();
+            AppendJoined(extras, GetStringArray(root, "tags"));
+            AppendJoined(extras, GetStringArray(root, "categories"));
+            AppendIfPresent(extras, GetString(root, "track"));
+            AppendIfPresent(extras, GetString(root, "album"));
+            AppendIfPresent(extras, GetString(root, "genre"));
+            AppendIfPresent(extras, GetString(root, "series"));
+            AppendIfPresent(extras, GetString(root, "season"));
+            AppendIfPresent(extras, GetString(root, "episode"));
+            AppendIfPresent(extras, GetString(root, "alt_title"));
+            AppendIfPresent(extras, GetString(root, "display_id"));
+            AppendIfPresent(extras, GetString(root, "extractor"));
+            AppendIfPresent(extras, GetString(root, "extractor_key"));
+
+            // Filename stem from requested downloads / _filename when present.
+            AppendIfPresent(extras, GetString(root, "_filename"));
+            AppendIfPresent(extras, GetString(root, "filename"));
+            if (root.TryGetProperty("requested_downloads", out var downloads) &&
+                downloads.ValueKind == JsonValueKind.Array)
             {
-                title = titleProp.GetString();
+                foreach (var d in downloads.EnumerateArray())
+                {
+                    AppendIfPresent(extras, GetString(d, "filename"));
+                    AppendIfPresent(extras, GetString(d, "_filename"));
+                }
             }
 
-            if (string.IsNullOrWhiteSpace(title) && root.TryGetProperty("fulltitle", out var fullTitle))
-            {
-                title = fullTitle.GetString();
-            }
+            var metadataText = extras.Count == 0
+                ? null
+                : string.Join(' ', extras.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase));
 
-            string? description = null;
-            if (root.TryGetProperty("description", out var descProp))
-            {
-                description = descProp.GetString();
-            }
-
-            // Merge title + description so keyword categorization has more signal.
-            var combined = string.Join(
-                " ",
-                new[] { title, description }.Where(s => !string.IsNullOrWhiteSpace(s)));
-            if (combined.Length > 500)
-            {
-                combined = combined[..500];
-            }
-
-            string? thumb = null;
-            if (root.TryGetProperty("thumbnail", out var thumbProp))
-            {
-                thumb = thumbProp.GetString();
-            }
-
+            string? thumb = GetString(root, "thumbnail");
             if (string.IsNullOrWhiteSpace(thumb) &&
                 root.TryGetProperty("thumbnails", out var thumbs) &&
                 thumbs.ValueKind == JsonValueKind.Array)
             {
                 foreach (var t in thumbs.EnumerateArray().Reverse())
                 {
-                    if (t.TryGetProperty("url", out var u))
+                    thumb = GetString(t, "url");
+                    if (!string.IsNullOrWhiteSpace(thumb))
                     {
-                        thumb = u.GetString();
-                        if (!string.IsNullOrWhiteSpace(thumb))
-                        {
-                            break;
-                        }
+                        break;
                     }
                 }
             }
 
-            return (string.IsNullOrWhiteSpace(combined) ? null : combined, thumb);
+            return new YtDlpParsedMetadata(title, description, uploader, metadataText, thumb);
         }
         catch (JsonException)
         {
-            return (null, null);
+            return new YtDlpParsedMetadata(null, null, null, null, null);
         }
     }
+
+    private static string? GetString(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String
+            ? prop.GetString()
+            : null;
+
+    private static IEnumerable<string> GetStringArray(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var prop))
+        {
+            yield break;
+        }
+
+        if (prop.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in prop.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    var s = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(s))
+                    {
+                        yield return s!;
+                    }
+                }
+            }
+        }
+        else if (prop.ValueKind == JsonValueKind.String)
+        {
+            var s = prop.GetString();
+            if (!string.IsNullOrWhiteSpace(s))
+            {
+                yield return s!;
+            }
+        }
+    }
+
+    private static void AppendJoined(List<string> target, IEnumerable<string> values)
+    {
+        foreach (var v in values)
+        {
+            AppendIfPresent(target, v);
+        }
+    }
+
+    private static void AppendIfPresent(List<string> target, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            target.Add(value.Trim());
+        }
+    }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
     private static string? FindProducedMediaFile(string expectedMp4Path)
     {

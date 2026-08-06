@@ -53,9 +53,29 @@ public sealed class MediaItemConfiguration : IEntityTypeConfiguration<MediaItem>
             .HasColumnName("title")
             .HasColumnType("text");
 
+        builder.Property(e => e.Description)
+            .HasColumnName("description")
+            .HasColumnType("text");
+
+        builder.Property(e => e.CreatorUsername)
+            .HasColumnName("creator_username")
+            .HasMaxLength(256);
+
+        builder.Property(e => e.MetadataText)
+            .HasColumnName("metadata_text")
+            .HasColumnType("text");
+
         builder.Property(e => e.Category)
             .HasColumnName("category")
             .HasMaxLength(64);
+
+        builder.Property(e => e.CategoryConfidence)
+            .HasColumnName("category_confidence")
+            .HasColumnType("double precision");
+
+        builder.Property(e => e.ClassificationSource)
+            .HasColumnName("classification_source")
+            .HasMaxLength(32);
 
         builder.Property(e => e.ThumbnailStorageKey)
             .HasColumnName("thumbnail_storage_key")

@@ -66,6 +66,7 @@ public sealed class MediaDownloadPipelineTests
                 })),
                 publisher,
                 new MediaCategorizationQueue(),
+                new NoOpNotificationRepository(),
                 storageOptions,
                 NullLogger<MediaDownloadPipeline>.Instance);
 
@@ -139,7 +140,10 @@ public sealed class MediaDownloadPipelineTests
             var repo = new FakeMediaRepository(item);
             var status = new MediaStatusService(repo);
             var queue = new InMemoryMediaJobQueue();
-            var publisher = new MediaJobPublisher(queue);
+            var publisher = new MediaJobPublisher(
+                queue,
+                Options.Create(new WorkerOptions { QueueName = "media-download-jobs", UseInMemoryQueue = true }),
+                NullLogger<MediaJobPublisher>.Instance);
             var downloadOptions = Options.Create(new DownloadOptions
             {
                 TempFolder = temp,
@@ -183,6 +187,7 @@ public sealed class MediaDownloadPipelineTests
                 retry,
                 publisher,
                 new MediaCategorizationQueue(),
+                new NoOpNotificationRepository(),
                 storageOptions,
                 NullLogger<MediaDownloadPipeline>.Instance);
 
@@ -212,7 +217,10 @@ public sealed class MediaDownloadPipelineTests
         var repo = new FakeMediaRepository(item);
         var status = new MediaStatusService(repo);
         var queue = new InMemoryMediaJobQueue();
-        var publisher = new MediaJobPublisher(queue);
+        var publisher = new MediaJobPublisher(
+            queue,
+            Options.Create(new WorkerOptions { QueueName = "media-download-jobs", UseInMemoryQueue = true }),
+            NullLogger<MediaJobPublisher>.Instance);
         var downloadOptions = Options.Create(new DownloadOptions { TempFolder = root });
         var storageOptions = Options.Create(new ObjectStorageOptions
         {
@@ -244,6 +252,7 @@ public sealed class MediaDownloadPipelineTests
             })),
                 publisher,
                 new MediaCategorizationQueue(),
+                new NoOpNotificationRepository(),
                 storageOptions,
                 NullLogger<MediaDownloadPipeline>.Instance);
     }
@@ -451,6 +460,21 @@ public sealed class MediaDownloadPipelineTests
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task UpdateAsync(MediaItem item, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class NoOpNotificationRepository : INotificationRepository
+    {
+        public Task AddAsync(Notification notification, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<(IReadOnlyList<Notification> Items, int TotalCount)> ListForUserAsync(
+            Guid userId,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<(IReadOnlyList<Notification>, int)>(([], 0));
+
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class PipelineTestTempFiles : ITemporaryFileManager

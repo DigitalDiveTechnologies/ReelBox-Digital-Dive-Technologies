@@ -145,6 +145,16 @@ public sealed class MediaController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _content.HandleAsync(id, uid, key, exp, sig, cancellationToken);
+
+        // PhysicalFile + range processing is required for Android video_player / ExoPlayer
+        // (Range: bytes=… → 206 Partial Content). A plain non-seekable stream breaks playback.
+        if (result.Content is FileStream fileStream)
+        {
+            var path = fileStream.Name;
+            await fileStream.DisposeAsync();
+            return PhysicalFile(path, result.ContentType, enableRangeProcessing: true);
+        }
+
         return File(result.Content, result.ContentType, enableRangeProcessing: true);
     }
 

@@ -2,8 +2,8 @@ import '../config/app_config.dart';
 
 /// Resolves signed media URLs from the API for use on device (playback, share, thumbnails).
 ///
-/// The API may return a relative path or a `localhost` base when Docker runs locally;
-/// the phone must use [AppConfig.apiBaseUrl] instead.
+/// The API may return a relative path, a `localhost` base, or a stale absolute host
+/// (wrong PublicApiBaseUrl). The phone must always use [AppConfig.apiBaseUrl].
 ///
 /// Basic-auth credentials embedded in [AppConfig.apiBaseUrl] are never copied into
 /// media URLs (players/caches must not receive host passwords).
@@ -21,17 +21,23 @@ Uri resolveSignedMediaUrl(String raw) {
     port: apiBase.hasPort ? apiBase.port : null,
   );
 
-  if (!uri.hasScheme || uri.host.isEmpty) {
+  final isMediaApiPath = uri.path.contains('/api/v1/media/');
+  final needsHostRewrite = !uri.hasScheme ||
+      uri.host.isEmpty ||
+      uri.host == 'localhost' ||
+      uri.host == '127.0.0.1' ||
+      (isMediaApiPath &&
+          (uri.host != publicBase.host ||
+              (publicBase.hasPort && uri.port != publicBase.port) ||
+              (!publicBase.hasPort && uri.hasPort)));
+
+  if (needsHostRewrite) {
+    final path = !uri.hasScheme || uri.host.isEmpty
+        ? (uri.path.startsWith('/') ? uri.path : '/${uri.path}')
+        : uri.path;
     uri = publicBase.replace(
-      path: uri.path.startsWith('/') ? uri.path : '/${uri.path}',
+      path: path,
       query: uri.hasQuery ? uri.query : null,
-    );
-  } else if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
-    uri = uri.replace(
-      scheme: publicBase.scheme,
-      host: publicBase.host,
-      port: publicBase.hasPort ? publicBase.port : null,
-      userInfo: '',
     );
   }
 

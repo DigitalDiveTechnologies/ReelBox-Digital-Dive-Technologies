@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using SocialReelSaver.Application.Abstractions.Admin;
 using SocialReelSaver.Application.Abstractions.Persistence;
+using SocialReelSaver.Infrastructure.Storage;
 using SocialReelSaver.Shared.Configuration;
 
 namespace SocialReelSaver.Infrastructure.Admin;
@@ -19,7 +20,7 @@ public sealed class AdminStorageScanner(
         if (!SupportsOrphanScan)
             return new(false, "Orphan scan is only supported for Local object storage.", [], 0, 0);
 
-        var root = Path.GetFullPath(storageOptions.Value.LocalRootPath);
+        var root = LocalStoragePath.Resolve(storageOptions.Value.LocalRootPath);
         if (!Directory.Exists(root))
             return new(true, "Local root path does not exist.", [], 0, 0);
 
@@ -51,7 +52,7 @@ public sealed class AdminStorageScanner(
 
         var scan = await ScanOrphansAsync(cancellationToken);
         var allowed = new HashSet<string>(scan.OrphanKeys, StringComparer.OrdinalIgnoreCase);
-        var root = Path.GetFullPath(storageOptions.Value.LocalRootPath);
+        var root = LocalStoragePath.Resolve(storageOptions.Value.LocalRootPath);
         var deleted = new List<string>();
 
         foreach (var key in keys.Where(k => !string.IsNullOrWhiteSpace(k)))

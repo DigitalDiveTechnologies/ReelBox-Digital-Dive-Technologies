@@ -31,7 +31,9 @@ public static class MediaMappings
             item.ErrorMessage,
             item.RetryCount,
             source,
-            thumbnailUrl);
+            thumbnailUrl,
+            item.CategoryConfidence,
+            item.ClassificationSource);
 
     public static MediaListResponse ToListResponse(
         this IReadOnlyList<MediaItem> items,

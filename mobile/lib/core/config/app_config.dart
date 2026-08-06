@@ -2,12 +2,14 @@ import 'env.dart';
 
 /// Compile-time configuration via `--dart-define`.
 ///
-/// Example:
+/// Local Wi‑Fi device testing:
 /// ```bash
 /// flutter run \
 ///   --dart-define=ENV=dev \
 ///   --dart-define=API_BASE_URL=http://192.168.100.8:5080/api
 /// ```
+///
+/// Release / remote testers (default): VPS Production API.
 class AppConfig {
   const AppConfig._();
 
@@ -18,7 +20,7 @@ class AppConfig {
 
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.100.8:5080/api',
+    defaultValue: 'http://157.254.225.131:8080/api',
   );
 
   static Env get env => Env.fromString(_envRaw);

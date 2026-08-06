@@ -35,6 +35,9 @@ public sealed class ObjectStorageOptions
 
     /// <summary>
     /// Root folder used by <c>Local</c> provider.
+    /// Prefer an absolute path (e.g. <c>C:\ReelBox\storage</c>) so API and Worker share files.
+    /// Relative paths resolve against the app base directory (not process CWD).
+    /// Overridden by <see cref="StorageOptions.LocalDirectory"/> when that is set.
     /// </summary>
     public string LocalRootPath { get; set; } = "storage";
 
@@ -98,4 +101,25 @@ public sealed class WorkerOptions
     /// Stale Downloading/Processing items older than this are reclaimed after Worker crash.
     /// </summary>
     public int StuckJobTimeoutMinutes { get; set; } = 15;
+
+    /// <summary>
+    /// When true, API hosts <c>MediaDownloadWorker</c> in-process (Development). Production must be false.
+    /// </summary>
+    public bool RunInApiHost { get; set; }
+
+    public bool UseInMemoryQueue { get; set; }
+}
+
+/// <summary>
+/// Convenience aliases for local disk layout on the VPS.
+/// When <see cref="LocalDirectory"/> is set, it becomes the object-storage root.
+/// </summary>
+public sealed class StorageOptions
+{
+    public const string SectionName = "Storage";
+
+    /// <summary>
+    /// Absolute directory for downloaded media and thumbnails (e.g. <c>C:\ReelBox\storage</c>).
+    /// </summary>
+    public string LocalDirectory { get; set; } = string.Empty;
 }

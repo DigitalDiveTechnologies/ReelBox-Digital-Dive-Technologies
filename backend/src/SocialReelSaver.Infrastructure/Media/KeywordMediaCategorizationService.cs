@@ -2,12 +2,12 @@ using Microsoft.Extensions.Logging;
 using SocialReelSaver.Application.Abstractions.Media;
 using SocialReelSaver.Application.Abstractions.Persistence;
 using SocialReelSaver.Domain.Media;
+using SocialReelSaver.Infrastructure.Media.Categorization;
 
 namespace SocialReelSaver.Infrastructure.Media;
 
 /// <summary>
-/// Keyword-based <see cref="IMediaCategorizationService"/> (no external AI).
-/// Swap DI registration later for Gemini/OpenAI/local models without changing contracts.
+/// Offline keyword-only categorizer. No Gemini/LLM/embeddings or external AI calls.
 /// </summary>
 public sealed class KeywordMediaCategorizationService : IMediaCategorizationService
 {
@@ -25,28 +25,21 @@ public sealed class KeywordMediaCategorizationService : IMediaCategorizationServ
     public async Task CategorizeAsync(Guid mediaId, CancellationToken cancellationToken = default)
     {
         var item = await _media.GetByIdAsync(mediaId, cancellationToken);
-        if (item is null)
+        if (item is null || !string.IsNullOrWhiteSpace(item.Category))
         {
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(item.Category))
-        {
-            return;
-        }
-
-        string category;
+        CategoryScoreResult result;
         try
         {
-            category = KeywordCategoryClassifier.Classify(
-                item.Title,
-                item.Platform.ToString(),
-                item.OriginalUrl);
+            var signals = CategorizationSignals.FromMediaItem(item);
+            result = WeightedKeywordCategoryEngine.Classify(signals);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Keyword categorization failed for media {MediaId}; using General", mediaId);
-            category = MediaCategories.Default;
+            result = new CategoryScoreResult(MediaCategories.Default, 0.1, 0, ClassificationSources.KeywordEngine);
         }
 
         item = await _media.GetByIdAsync(mediaId, cancellationToken);
@@ -55,11 +48,18 @@ public sealed class KeywordMediaCategorizationService : IMediaCategorizationServ
             return;
         }
 
-        item.Category = category;
+        item.Category = result.Category;
+        item.CategoryConfidence = Math.Round(result.Confidence, 4);
+        item.ClassificationSource = ClassificationSources.KeywordEngine;
         item.UpdatedAt = DateTimeOffset.UtcNow;
         await _media.UpdateAsync(item, cancellationToken);
         await _media.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Categorized media {MediaId} as {Category} (keyword)", mediaId, category);
+        _logger.LogInformation(
+            "Categorized media {MediaId} as {Category} (KeywordEngine, score {Score}, confidence {Confidence:0.00})",
+            mediaId,
+            result.Category,
+            result.RawScore,
+            result.Confidence);
     }
 }

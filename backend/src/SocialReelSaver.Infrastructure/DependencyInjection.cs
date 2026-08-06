@@ -39,6 +39,8 @@ public static class DependencyInjection
         services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.SectionName));
         services.Configure<RedisOptions>(configuration.GetSection(RedisOptions.SectionName));
         services.Configure<ObjectStorageOptions>(configuration.GetSection(ObjectStorageOptions.SectionName));
+        services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.SectionName));
+        services.AddSingleton<IPostConfigureOptions<ObjectStorageOptions>, ObjectStorageOptionsPostConfigure>();
         services.Configure<DownloadOptions>(configuration.GetSection(DownloadOptions.SectionName));
         services.Configure<ProvidersOptions>(configuration.GetSection(ProvidersOptions.SectionName));
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
@@ -97,7 +99,6 @@ public static class DependencyInjection
         services.AddScoped<MediaDownloadPipeline>();
         services.AddScoped<StuckMediaJobReclaimer>();
         services.AddSingleton<IMediaCategorizationQueue, MediaCategorizationQueue>();
-        // Keyword engine now; swap implementation for Gemini/OpenAI later without contract changes.
         services.AddScoped<IMediaCategorizationService, KeywordMediaCategorizationService>();
 
         services.AddHttpClient(MetaGraphMediaResolver.HttpClientName, (sp, client) =>
@@ -181,9 +182,16 @@ public static class DependencyInjection
         IConfiguration configuration,
         string redisConnection)
     {
-        var useInMemory = configuration.GetValue("Worker:UseInMemoryQueue", false)
-            || string.IsNullOrWhiteSpace(redisConnection);
-        if (useInMemory)
+        var useInMemory = configuration.GetValue("Worker:UseInMemoryQueue", false);
+        if (!useInMemory && string.IsNullOrWhiteSpace(redisConnection))
+        {
+            throw new InvalidOperationException(
+                "Worker:UseInMemoryQueue is false but Redis is not configured. " +
+                "Set ConnectionStrings:Redis and Redis:ConnectionString to localhost:6379 " +
+                "(API and Worker must share the same Redis list media-download-jobs).");
+        }
+
+        if (useInMemory || string.IsNullOrWhiteSpace(redisConnection))
         {
             services.AddSingleton<IMediaJobQueue, InMemoryMediaJobQueue>();
             return;

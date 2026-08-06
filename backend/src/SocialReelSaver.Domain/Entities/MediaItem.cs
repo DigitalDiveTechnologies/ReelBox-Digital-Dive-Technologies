@@ -23,8 +23,25 @@ public sealed class MediaItem
 
     public string? Title { get; set; }
 
-    /// <summary>AI category label (nullable until background categorization finishes).</summary>
+    /// <summary>Caption/description text from the provider (yt-dlp description, etc.).</summary>
+    public string? Description { get; set; }
+
+    /// <summary>Uploader / channel / creator username when available.</summary>
+    public string? CreatorUsername { get; set; }
+
+    /// <summary>
+    /// Extra textual metadata for offline categorization (tags, categories, track, filename tokens, etc.).
+    /// </summary>
+    public string? MetadataText { get; set; }
+
+    /// <summary>Category label (nullable until background categorization finishes).</summary>
     public string? Category { get; set; }
+
+    /// <summary>Classifier confidence in [0, 1].</summary>
+    public double? CategoryConfidence { get; set; }
+
+    /// <summary>Always <c>KeywordEngine</c> (offline deterministic classifier).</summary>
+    public string? ClassificationSource { get; set; }
 
     public string? ThumbnailStorageKey { get; set; }
 
