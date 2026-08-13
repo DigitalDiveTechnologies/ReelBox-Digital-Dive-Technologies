@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required for release/debug API access (SRS mobile ↔ backend). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Gallery export on API ≤28 only. Android 10+ uses MediaStore scoped storage. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
     <application
         android:label="ReelBox"
         android:name="${applicationName}"

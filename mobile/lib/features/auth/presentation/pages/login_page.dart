@@ -7,6 +7,7 @@ import '../../../../core/router/route_paths.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_gradients.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../media/presentation/providers/media_providers.dart';
 import '../../../share/presentation/providers/pending_share_provider.dart';
 import '../providers/auth_providers.dart';
 import '../widgets/forgot_password_sheet.dart';
@@ -92,6 +93,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             email: _emailController.text.trim(),
             password: _passwordController.text,
           );
+      if (!mounted) return;
+      try {
+        ref.invalidate(mediaListProvider);
+        await ref.read(mediaListProvider.future);
+      } catch (_) {
+        // Login succeeded; Home will retry via its existing error handling.
+      }
       if (!mounted) return;
       final pendingShareUrl = ref.read(pendingShareUrlProvider);
       if (pendingShareUrl != null && pendingShareUrl.trim().isNotEmpty) {

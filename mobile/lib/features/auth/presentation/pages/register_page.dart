@@ -9,6 +9,7 @@ import '../../../../core/theme/app_gradients.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../media/presentation/providers/media_providers.dart';
 import '../../../share/presentation/providers/pending_share_provider.dart';
 import '../providers/auth_providers.dart';
 import '../widgets/login_brand_mark.dart';
@@ -112,6 +113,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       );
       if (!mounted) return;
       if (user == null) return;
+
+      try {
+        ref.invalidate(mediaListProvider);
+        await ref.read(mediaListProvider.future);
+      } catch (_) {
+        // Signup succeeded; Home will retry via its existing error handling.
+      }
+      if (!mounted) return;
 
       final pendingShareUrl = ref.read(pendingShareUrlProvider);
       if (pendingShareUrl != null && pendingShareUrl.trim().isNotEmpty) {

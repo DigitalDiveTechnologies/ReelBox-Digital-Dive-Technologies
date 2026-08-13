@@ -3,74 +3,293 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
 
 import '../../../core/network/media_url_resolver.dart';
+import '../../media/data/gallery/gallery_export_store.dart';
 import '../../media/data/models/media_dto.dart';
 
-/// Downloads completed media to app cache and opens the native Android share sheet.
+/// Opens the native Android share sheet for a completed reel.
+///
+/// Fast paths (no VPS download):
+/// 1. Existing `srs-share-$mediaId.*` app cache
+/// 2. Existing Task 1 MediaStore/Gallery entry (`Movies/ReelBox/ReelBox_<id>…`)
+///
+/// Fallback: stream signed content URL to share cache, then FileProvider share.
 class MediaShareService {
   MediaShareService({
     MethodChannel? channel,
     http.Client? httpClient,
+    Future<String?> Function()? resolveCacheDir,
+    Future<bool> Function({
+      required String path,
+      required String mimeType,
+      required String text,
+    })? shareFile,
+    Future<bool> Function({
+      required String mediaIdToken,
+      required String mimeType,
+      required String text,
+    })? shareGalleryByMediaId,
+    /// Maximum time to poll MediaStore waiting for a Gallery commit.
+    /// Defaults to 10 seconds in production.
+    /// Override to [Duration.zero] in tests to skip the wait immediately.
+    Duration galleryPollTimeout = const Duration(seconds: 10),
   })  : _channel = channel ?? const MethodChannel(_channelName),
-        _http = httpClient ?? http.Client();
+        _http = httpClient ?? http.Client(),
+        _galleryPollTimeout = galleryPollTimeout, // ignore: prefer_initializing_formals
+        _resolveCacheDir = resolveCacheDir, // ignore: prefer_initializing_formals
+        _shareFile = shareFile, // ignore: prefer_initializing_formals
+        _shareGalleryByMediaId =
+            shareGalleryByMediaId; // ignore: prefer_initializing_formals
 
   static const String _channelName = 'com.example.mobile/share_intent';
   static const String _methodGetCacheDir = 'getCacheDir';
   static const String _methodShareFile = 'shareFile';
+  static const String _methodShareGalleryByMediaId = 'shareGalleryVideoByMediaId';
 
   final MethodChannel _channel;
   final http.Client _http;
+  final Duration _galleryPollTimeout;
+  final Future<String?> Function()? _resolveCacheDir;
+  final Future<bool> Function({
+    required String path,
+    required String mimeType,
+    required String text,
+  })? _shareFile;
+  final Future<bool> Function({
+    required String mediaIdToken,
+    required String mimeType,
+    required String text,
+  })? _shareGalleryByMediaId;
 
-  Future<void> shareDownloadedFile({
-    required String mediaId,
-    required String displayTitle,
-    required PlaybackDto playback,
-    required String fallbackMime,
-  }) async {
-    if (kIsWeb) {
-      throw const ShareDownloadException('Sharing is not supported on web.');
-    }
+  /// Stable share-cache file name for [mediaId] + [extension].
+  static String shareCacheFileName(String mediaId, String extension) {
+    final ext = extension.startsWith('.') ? extension : '.$extension';
+    final safeId = mediaId.trim().replaceAll(RegExp(r'[^\w\-]+'), '_');
+    return 'srs-share-$safeId$ext';
+  }
 
-    final rawUrl = playback.playbackUrl?.trim();
-    if (rawUrl == null || rawUrl.isEmpty) {
-      throw const MissingPlaybackUrlException();
-    }
+  /// Token used in Task 1 Gallery display names: `ReelBox_<token>…`.
+  static String galleryMediaIdToken(String mediaId) {
+    final bare = buildGalleryDisplayName(mediaId: mediaId, title: null);
+    const prefix = 'ReelBox_';
+    if (!bare.startsWith(prefix)) return mediaId.trim();
+    final withoutPrefix = bare.substring(prefix.length);
+    final dot = withoutPrefix.lastIndexOf('.');
+    if (dot <= 0) return withoutPrefix;
+    return withoutPrefix.substring(0, dot);
+  }
 
-    final uri = resolveSignedMediaUrl(rawUrl);
-    final response = await _http.get(uri);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ShareDownloadException(
-        'Could not download media to share (${response.statusCode}).',
-      );
-    }
-    if (response.bodyBytes.isEmpty) {
-      throw const ShareDownloadException('Downloaded file is empty.');
-    }
-
-    final mime = (playback.mimeType ?? fallbackMime).split(';').first.trim();
-    final extension = switch (mime) {
+  static String extensionForMime(String? mimeType) {
+    final mime = (mimeType ?? 'video/mp4').split(';').first.trim().toLowerCase();
+    return switch (mime) {
       'video/quicktime' => '.mov',
       'image/jpeg' => '.jpg',
       'image/png' => '.png',
       'image/webp' => '.webp',
       _ => '.mp4',
     };
+  }
 
-    final cacheDir = await _channel.invokeMethod<String>(_methodGetCacheDir);
-    if (cacheDir == null || cacheDir.isEmpty) {
-      throw const ShareDownloadException('Could not access app cache for sharing.');
+  /// Returns an existing non-empty share cache file, if any.
+  Future<File?> findExistingShareCache({
+    required String mediaId,
+    String? preferredMime,
+  }) async {
+    final cacheDir = await _cacheDirPath();
+    if (cacheDir == null || cacheDir.isEmpty) return null;
+
+    final preferred = extensionForMime(preferredMime);
+    final candidates = <String>{
+      preferred,
+      '.mp4',
+      '.mov',
+      '.jpg',
+      '.png',
+      '.webp',
+    };
+
+    for (final ext in candidates) {
+      final file = File(p.join(cacheDir, shareCacheFileName(mediaId, ext)));
+      if (await file.exists()) {
+        final length = await file.length();
+        if (length > 0) return file;
+      }
+    }
+    return null;
+  }
+
+  /// Shares a completed reel, preferring local sources over network download.
+  ///
+  /// [resolvePlayback] is only invoked when no valid local share/Gallery source exists.
+  Future<void> shareCompletedMedia({
+    required String mediaId,
+    required String displayTitle,
+    required String fallbackMime,
+    required Future<PlaybackDto> Function() resolvePlayback,
+  }) async {
+    if (kIsWeb) {
+      throw const ShareDownloadException('Sharing is not supported on web.');
     }
 
-    final filePath = '$cacheDir/srs-share-$mediaId$extension';
-    await File(filePath).writeAsBytes(response.bodyBytes, flush: true);
+    final mimeHint = fallbackMime.split(';').first.trim();
+    final cached = await findExistingShareCache(
+      mediaId: mediaId,
+      preferredMime: mimeHint,
+    );
+    if (cached != null) {
+      final mime = _mimeForPath(cached.path, mimeHint);
+      await _invokeShareFile(
+        path: cached.path,
+        mimeType: mime,
+        text: displayTitle,
+      );
+      return;
+    }
+
+    // Task 1 Gallery already wrote Movies/ReelBox — share MediaStore URI (no VPS).
+    //
+    // Android MediaStore hides IS_PENDING=1 rows from ContentResolver queries
+    // by default. Task 1 inserts the row with IS_PENDING=1 while streaming
+    // the video bytes into MediaStore and clears it to IS_PENDING=0 only after
+    // the copy is fully committed. The native findReelBoxGalleryVideo query
+    // implicitly excludes IS_PENDING=1 rows (Android default), so any URI it
+    // returns is guaranteed to be a fully committed, safe-to-share file.
+    //
+    // Race: if the user taps Share immediately after download, Task 1 may still
+    // be in the MediaStore write phase (IS_PENDING=1). Rather than immediately
+    // starting an ~8-second full VPS download, poll in 250ms steps for up to
+    // 10 seconds. The moment a committed row appears the share sheet opens with
+    // zero VPS traffic. If nothing is committed within the bounded wait, fall
+    // through to the existing VPS streaming fallback below.
+    //
+    // The polling loop is Android-only; other platforms skip it immediately.
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      const pollInterval = Duration(milliseconds: 250);
+      final deadline = DateTime.now().add(_galleryPollTimeout);
+      while (true) {
+        final sharedFromGallery = await _tryShareFromGallery(
+          mediaId: mediaId,
+          mimeType: mimeHint.isEmpty ? 'video/mp4' : mimeHint,
+          text: displayTitle,
+        );
+        if (sharedFromGallery) return;
+        if (DateTime.now().isAfter(deadline)) break;
+        if (_galleryPollTimeout == Duration.zero) break;
+        await Future<void>.delayed(pollInterval);
+      }
+    }
+
+    final playback = await resolvePlayback();
+    final rawUrl = playback.playbackUrl?.trim();
+    if (rawUrl == null || rawUrl.isEmpty) {
+      throw const MissingPlaybackUrlException();
+    }
+
+    final mime = (playback.mimeType ?? fallbackMime).split(';').first.trim();
+    final extension = extensionForMime(mime);
+    final cacheDir = await _cacheDirPath();
+    if (cacheDir == null || cacheDir.isEmpty) {
+      throw const ShareDownloadException(
+        'Could not access app cache for sharing.',
+      );
+    }
+
+    final filePath = p.join(cacheDir, shareCacheFileName(mediaId, extension));
+    await _streamToFile(
+      uri: resolveSignedMediaUrl(rawUrl),
+      destination: File(filePath),
+    );
+
+    await _invokeShareFile(
+      path: filePath,
+      mimeType: mime.isEmpty ? 'video/mp4' : mime,
+      text: displayTitle,
+    );
+  }
+
+  /// Backward-compatible entry used by older call sites / tests.
+  Future<void> shareDownloadedFile({
+    required String mediaId,
+    required String displayTitle,
+    required PlaybackDto playback,
+    required String fallbackMime,
+  }) {
+    return shareCompletedMedia(
+      mediaId: mediaId,
+      displayTitle: displayTitle,
+      fallbackMime: fallbackMime,
+      resolvePlayback: () async => playback,
+    );
+  }
+
+  Future<bool> _tryShareFromGallery({
+    required String mediaId,
+    required String mimeType,
+    required String text,
+  }) async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return false;
+    }
+    final token = galleryMediaIdToken(mediaId);
+    if (token.isEmpty) return false;
 
     try {
-      final shared = await _channel.invokeMethod<bool>(_methodShareFile, {
-        'path': filePath,
-        'mimeType': mime,
-        'text': displayTitle,
-      });
+      final custom = _shareGalleryByMediaId;
+      if (custom != null) {
+        return custom(
+          mediaIdToken: token,
+          mimeType: mimeType,
+          text: text,
+        );
+      }
+      final shared = await _channel.invokeMethod<bool>(
+        _methodShareGalleryByMediaId,
+        <String, Object?>{
+          'mediaIdToken': token,
+          'mimeType': mimeType,
+          'text': text,
+        },
+      );
+      return shared == true;
+    } on PlatformException catch (error) {
+      debugPrint(
+        'SHARE: Gallery MediaStore lookup failed: ${error.code} ${error.message}',
+      );
+      return false;
+    } catch (error) {
+      debugPrint('SHARE: Gallery MediaStore lookup failed: $error');
+      return false;
+    }
+  }
+
+  Future<String?> _cacheDirPath() async {
+    final custom = _resolveCacheDir;
+    if (custom != null) {
+      return custom();
+    }
+    return _channel.invokeMethod<String>(_methodGetCacheDir);
+  }
+
+  Future<void> _invokeShareFile({
+    required String path,
+    required String mimeType,
+    required String text,
+  }) async {
+    try {
+      final customShare = _shareFile;
+      final shared = customShare != null
+          ? await customShare(
+              path: path,
+              mimeType: mimeType,
+              text: text,
+            )
+          : await _channel.invokeMethod<bool>(_methodShareFile, {
+              'path': path,
+              'mimeType': mimeType,
+              'text': text,
+            });
 
       if (shared != true) {
         throw const ShareDownloadException('Native share sheet did not open.');
@@ -78,6 +297,58 @@ class MediaShareService {
     } on PlatformException catch (error) {
       throw ShareDownloadException(error.message ?? 'Share failed.');
     }
+  }
+
+  /// Streams HTTP response to [destination] without loading all bytes in RAM.
+  Future<void> _streamToFile({
+    required Uri uri,
+    required File destination,
+  }) async {
+    if (await destination.exists()) {
+      await destination.delete();
+    }
+
+    final request = http.Request('GET', uri);
+    final response = await _http.send(request);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ShareDownloadException(
+        'Could not download media to share (${response.statusCode}).',
+      );
+    }
+
+    final sink = destination.openWrite();
+    try {
+      await response.stream.pipe(sink);
+      await sink.flush();
+    } catch (error) {
+      await sink.close();
+      try {
+        if (await destination.exists()) {
+          await destination.delete();
+        }
+      } catch (_) {}
+      rethrow;
+    }
+    await sink.close();
+
+    final length = await destination.length();
+    if (length <= 0) {
+      try {
+        await destination.delete();
+      } catch (_) {}
+      throw const ShareDownloadException('Downloaded file is empty.');
+    }
+  }
+
+  String _mimeForPath(String path, String fallbackMime) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.mov')) return 'video/quicktime';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.mp4')) return 'video/mp4';
+    final mime = fallbackMime.split(';').first.trim();
+    return mime.isEmpty ? 'video/mp4' : mime;
   }
 }
 
