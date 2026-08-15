@@ -42,8 +42,6 @@ void main() {
     return MediaShareService(
       httpClient: client,
       resolveCacheDir: () async => tempDir.path,
-      // Skip the 10-second Gallery poll in unit tests.
-      galleryPollTimeout: Duration.zero,
       shareFile: ({
         required String path,
         required String mimeType,
@@ -192,11 +190,8 @@ void main() {
         ),
       );
 
-      // Polling loop calls shareGalleryByMediaId in 250ms steps until the
-      // 10-second deadline. Exact count is an implementation detail — assert
-      // at least one attempt was made before falling back to VPS.
-      expect(galleryShareCalls, isNotEmpty);
-      expect(galleryShareCalls.every((c) => c['mediaIdToken'] != null), isTrue);
+      expect(galleryShareCalls, hasLength(1));
+      expect(galleryShareCalls.single['mediaIdToken'], isNotNull);
       expect(playbackResolves, 1);
       expect(shareCalls, hasLength(1));
       expect(await File(shareCalls.single['path']!).length(), payload.length);

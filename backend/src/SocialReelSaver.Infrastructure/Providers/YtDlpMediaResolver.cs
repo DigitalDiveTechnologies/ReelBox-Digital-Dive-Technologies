@@ -68,8 +68,11 @@ public sealed class YtDlpMediaResolver
                 Path.GetDirectoryName(outputPath)!,
                 Path.GetFileNameWithoutExtension(outputPath) + ".%(ext)s");
 
+            // Facebook: prefer HD/best MP4. `sd` first produced noticeably softer
+            // in-app playback and Gallery copies. Keep `sd` last as fallback only.
+            // Instagram format is unchanged.
             var format = platform == MediaPlatform.Facebook
-                ? "sd/hd/b[ext=mp4]/best[ext=mp4]/best"
+                ? "hd/b[ext=mp4]/best[ext=mp4]/best/sd"
                 : "b[ext=mp4]/best[ext=mp4]/bv*[ext=mp4]+ba[ext=m4a]/best";
 
             _logger.LogInformation(

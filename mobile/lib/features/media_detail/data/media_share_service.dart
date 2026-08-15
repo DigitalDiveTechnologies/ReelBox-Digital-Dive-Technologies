@@ -31,13 +31,8 @@ class MediaShareService {
       required String mimeType,
       required String text,
     })? shareGalleryByMediaId,
-    /// Maximum time to poll MediaStore waiting for a Gallery commit.
-    /// Defaults to 10 seconds in production.
-    /// Override to [Duration.zero] in tests to skip the wait immediately.
-    Duration galleryPollTimeout = const Duration(seconds: 10),
   })  : _channel = channel ?? const MethodChannel(_channelName),
         _http = httpClient ?? http.Client(),
-        _galleryPollTimeout = galleryPollTimeout, // ignore: prefer_initializing_formals
         _resolveCacheDir = resolveCacheDir, // ignore: prefer_initializing_formals
         _shareFile = shareFile, // ignore: prefer_initializing_formals
         _shareGalleryByMediaId =
@@ -46,22 +41,24 @@ class MediaShareService {
   static const String _channelName = 'com.example.mobile/share_intent';
   static const String _methodGetCacheDir = 'getCacheDir';
   static const String _methodShareFile = 'shareFile';
-  static const String _methodShareGalleryByMediaId = 'shareGalleryVideoByMediaId';
+  static const String _methodShareGalleryByMediaId =
+      'shareGalleryVideoByMediaId';
 
   final MethodChannel _channel;
   final http.Client _http;
-  final Duration _galleryPollTimeout;
   final Future<String?> Function()? _resolveCacheDir;
   final Future<bool> Function({
     required String path,
     required String mimeType,
     required String text,
-  })? _shareFile;
+  })?
+  _shareFile;
   final Future<bool> Function({
     required String mediaIdToken,
     required String mimeType,
     required String text,
-  })? _shareGalleryByMediaId;
+  })?
+  _shareGalleryByMediaId;
 
   /// Stable share-cache file name for [mediaId] + [extension].
   static String shareCacheFileName(String mediaId, String extension) {
@@ -82,7 +79,11 @@ class MediaShareService {
   }
 
   static String extensionForMime(String? mimeType) {
-    final mime = (mimeType ?? 'video/mp4').split(';').first.trim().toLowerCase();
+    final mime = (mimeType ?? 'video/mp4')
+        .split(';')
+        .first
+        .trim()
+        .toLowerCase();
     return switch (mime) {
       'video/quicktime' => '.mov',
       'image/jpeg' => '.jpg',
@@ -149,35 +150,34 @@ class MediaShareService {
     }
 
     // Task 1 Gallery already wrote Movies/ReelBox — share MediaStore URI (no VPS).
-    //
-    // Android MediaStore hides IS_PENDING=1 rows from ContentResolver queries
-    // by default. Task 1 inserts the row with IS_PENDING=1 while streaming
-    // the video bytes into MediaStore and clears it to IS_PENDING=0 only after
-    // the copy is fully committed. The native findReelBoxGalleryVideo query
-    // implicitly excludes IS_PENDING=1 rows (Android default), so any URI it
-    // returns is guaranteed to be a fully committed, safe-to-share file.
-    //
-    // Race: if the user taps Share immediately after download, Task 1 may still
-    // be in the MediaStore write phase (IS_PENDING=1). Rather than immediately
-    // starting an ~8-second full VPS download, poll in 250ms steps for up to
-    // 10 seconds. The moment a committed row appears the share sheet opens with
-    // zero VPS traffic. If nothing is committed within the bounded wait, fall
-    // through to the existing VPS streaming fallback below.
-    //
-    // The polling loop is Android-only; other platforms skip it immediately.
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      const pollInterval = Duration(milliseconds: 250);
-      final deadline = DateTime.now().add(_galleryPollTimeout);
-      while (true) {
-        final sharedFromGallery = await _tryShareFromGallery(
+    // Single lookup. A committed row is shareable immediately; if none exists
+    // yet, fall through to VPS instead of waiting on MediaStore.
+    final sharedFromGallery = await _tryShareFromGallery(
+      mediaId: mediaId,
+      mimeType: mimeHint.isEmpty ? 'video/mp4' : mimeHint,
+      text: displayTitle,
+    );
+    if (sharedFromGallery) {
+      return;
+    }
+
+    // MediaStore can lag a moment after Task 1 marks the id exported.
+    // Retry only then so share does not wait on an in-progress export or VPS.
+    var alreadyExported = false;
+    try {
+      alreadyExported = await GalleryExportStore().isExported(mediaId);
+    } catch (_) {
+      alreadyExported = false;
+    }
+    if (alreadyExported) {
+      for (var attempt = 0; attempt < 4; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        final retried = await _tryShareFromGallery(
           mediaId: mediaId,
           mimeType: mimeHint.isEmpty ? 'video/mp4' : mimeHint,
           text: displayTitle,
         );
-        if (sharedFromGallery) return;
-        if (DateTime.now().isAfter(deadline)) break;
-        if (_galleryPollTimeout == Duration.zero) break;
-        await Future<void>.delayed(pollInterval);
+        if (retried) return;
       }
     }
 
@@ -238,11 +238,7 @@ class MediaShareService {
     try {
       final custom = _shareGalleryByMediaId;
       if (custom != null) {
-        return custom(
-          mediaIdToken: token,
-          mimeType: mimeType,
-          text: text,
-        );
+        return custom(mediaIdToken: token, mimeType: mimeType, text: text);
       }
       final shared = await _channel.invokeMethod<bool>(
         _methodShareGalleryByMediaId,
@@ -280,11 +276,7 @@ class MediaShareService {
     try {
       final customShare = _shareFile;
       final shared = customShare != null
-          ? await customShare(
-              path: path,
-              mimeType: mimeType,
-              text: text,
-            )
+          ? await customShare(path: path, mimeType: mimeType, text: text)
           : await _channel.invokeMethod<bool>(_methodShareFile, {
               'path': path,
               'mimeType': mimeType,

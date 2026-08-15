@@ -21,8 +21,6 @@ import '../../../../shared/widgets/instagram_icon.dart';
 import '../../../../shared/widgets/media_thumbnail_placeholder.dart';
 import '../../../media/presentation/providers/media_providers.dart';
 import '../../data/media_share_service.dart';
-import '../../domain/related_reels.dart';
-import '../widgets/related_reel_card.dart';
 
 /// Media detail screen (SRS §7 / FR-014–016).
 class MediaDetailPage extends ConsumerStatefulWidget {
@@ -182,7 +180,6 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(mediaDetailProvider(widget.mediaId));
-    final listAsync = ref.watch(mediaListProvider);
     final horizontal = AppSpacing.horizontalInset(context);
 
     return Scaffold(
@@ -232,12 +229,6 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                     ),
                     data: (item) {
                       final canPlay = item.status == MediaStatus.completed;
-                      final groups = buildRelatedReelGroups(
-                        current: item,
-                        all: listAsync.asData?.value ?? const [],
-                      );
-                      final hasRelated = groups.samePlatform.isNotEmpty ||
-                          groups.otherPlatform.isNotEmpty;
                       return Align(
                         alignment: Alignment.topCenter,
                         child: ConstrainedBox(
@@ -245,7 +236,7 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                           child: ListView(
                             padding: EdgeInsets.fromLTRB(
                               horizontal,
-                              0,
+                              AppSpacing.md,
                               horizontal,
                               AppSpacing.xxl,
                             ),
@@ -288,13 +279,6 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
                                 onShare: () => unawaited(_onShare(item)),
                                 onDelete: _confirmDelete,
                               ),
-                              if (hasRelated) ...[
-                                const SizedBox(height: AppSpacing.lg),
-                                _RelatedReelsFeed(
-                                  samePlatform: groups.samePlatform,
-                                  otherPlatform: groups.otherPlatform,
-                                ),
-                              ],
                             ],
                           ),
                         ),
@@ -307,53 +291,6 @@ class _MediaDetailPageState extends ConsumerState<MediaDetailPage> {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// TikTok / Reels-style vertical feed for related reels.
-///
-/// Same-platform reels appear first; other-platform reels follow.
-/// The currently opened reel is always excluded by [buildRelatedReelGroups].
-/// No headings are added — the platform pill on each card communicates the
-/// source visually.
-///
-/// A [Column] is used (not a [ListView]) so that this section participates in
-/// the parent [ListView] scroll without creating a nested-scroll conflict.
-class _RelatedReelsFeed extends StatelessWidget {
-  const _RelatedReelsFeed({
-    required this.samePlatform,
-    required this.otherPlatform,
-  });
-
-  final List<MediaItemPreview> samePlatform;
-  final List<MediaItemPreview> otherPlatform;
-
-  @override
-  Widget build(BuildContext context) {
-    // Same platform first, then the other platform — ordering is already
-    // guaranteed by buildRelatedReelGroups; we just concatenate.
-    final allRelated = [...samePlatform, ...otherPlatform];
-    if (allRelated.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (int i = 0; i < allRelated.length; i++) ...[
-          if (i > 0) const SizedBox(height: AppSpacing.md),
-          // 9:16 portrait aspect ratio mirrors TikTok / Instagram Reels.
-          AspectRatio(
-            aspectRatio: 9 / 16,
-            child: RelatedReelCard(
-              key: ValueKey<String>('related-feed-${allRelated[i].id}'),
-              item: allRelated[i],
-              onTap: () => context.push(
-                RoutePaths.mediaDetailPath(allRelated[i].id),
-              ),
-            ),
-          ),
-        ],
-      ],
     );
   }
 }

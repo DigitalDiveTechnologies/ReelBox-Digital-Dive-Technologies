@@ -48,3 +48,48 @@ List<MediaItemPreview> buildRelatedReels({
     ...groups.otherPlatform,
   ];
 }
+
+/// Vertical player feed.
+///
+/// Same-platform completed reels keep their `createdAt` DESC order. The opened
+/// reel is always first (page 0). Items before it in that order come next,
+/// then items after it, then the other platform (never interleaved).
+///
+/// Opened B in A-B-C-D → B, A, C, D.
+List<MediaItemPreview> buildVerticalReelFeed({
+  required MediaItemPreview current,
+  required List<MediaItemPreview> all,
+}) {
+  if (current.status != MediaStatus.completed) {
+    return <MediaItemPreview>[current];
+  }
+
+  final currentId = current.id.trim();
+  final same = all
+      .where(
+        (m) =>
+            m.status == MediaStatus.completed &&
+            m.platform == current.platform &&
+            m.id.trim().isNotEmpty,
+      )
+      .toList(growable: true)
+    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  final currentIndex = same.indexWhere((m) => m.id.trim() == currentId);
+  if (currentIndex < 0) {
+    same.insert(0, current);
+  }
+
+  final index = same.indexWhere((m) => m.id.trim() == currentId);
+  final before = same.sublist(0, index);
+  final after = same.sublist(index + 1);
+
+  final other = buildRelatedReelGroups(current: current, all: all).otherPlatform;
+
+  return <MediaItemPreview>[
+    same[index],
+    ...before,
+    ...after,
+    ...other,
+  ];
+}

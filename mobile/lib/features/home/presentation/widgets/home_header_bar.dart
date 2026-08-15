@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -6,18 +7,19 @@ import '../../../../core/theme/app_gradients.dart';
 import '../../../../core/theme/app_radius.dart';
 import '../../../../core/theme/app_shadows.dart';
 import '../../../../core/theme/app_spacing.dart';
+import '../../../notifications/presentation/providers/notification_providers.dart';
 
 /// Top bar: brand mark + ReelBox + notification (Home mockup).
-class HomeHeaderBar extends StatelessWidget {
-  const HomeHeaderBar({
-    super.key,
-    required this.onNotificationTap,
-  });
+class HomeHeaderBar extends ConsumerWidget {
+  const HomeHeaderBar({super.key, required this.onNotificationTap});
 
   final VoidCallback onNotificationTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadCount = ref.watch(unreadNotificationCountProvider);
+    final hasUnread = unreadCount > 0;
+
     return Row(
       children: [
         Container(
@@ -60,10 +62,37 @@ class HomeHeaderBar extends StatelessWidget {
                   color: AppColors.splashChipBorder.withValues(alpha: 0.8),
                 ),
               ),
-              child: const Icon(
-                Icons.notifications_none_rounded,
-                size: 20,
-                color: AppColors.splashTextPrimary,
+              child: Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    hasUnread
+                        ? Icons.notifications_rounded
+                        : Icons.notifications_none_rounded,
+                    size: 20,
+                    color: AppColors.splashTextPrimary,
+                  ),
+                  if (hasUnread)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: SizedBox(
+                        width: 8,
+                        height: 8,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: AppColors.brandOrange,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.splashBgDeep,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

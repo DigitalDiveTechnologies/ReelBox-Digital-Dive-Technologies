@@ -6,6 +6,7 @@ class NotificationItem {
     required this.body,
     required this.createdAt,
     this.isRead = false,
+    this.mediaId,
   });
 
   final String id;
@@ -13,4 +14,7 @@ class NotificationItem {
   final String body;
   final DateTime createdAt;
   final bool isRead;
+
+  /// Linked media when the API includes a non-empty `mediaId`.
+  final String? mediaId;
 }

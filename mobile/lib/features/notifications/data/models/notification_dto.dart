@@ -22,20 +22,27 @@ class NotificationDto {
       id: json['id']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
       message: json['message']?.toString() ?? '',
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
           DateTime.now().toUtc(),
       isRead: json['isRead'] == true,
       mediaId: json['mediaId']?.toString(),
     );
   }
 
-  NotificationItem toItem() => NotificationItem(
-        id: id,
-        title: title,
-        body: message,
-        createdAt: createdAt.isUtc ? createdAt : createdAt.toUtc(),
-        isRead: isRead,
-      );
+  NotificationItem toItem() {
+    final linkedMediaId = mediaId?.trim();
+    return NotificationItem(
+      id: id,
+      title: title,
+      body: message,
+      createdAt: createdAt.isUtc ? createdAt : createdAt.toUtc(),
+      isRead: isRead,
+      mediaId: (linkedMediaId == null || linkedMediaId.isEmpty)
+          ? null
+          : linkedMediaId,
+    );
+  }
 }
 
 class NotificationListDto {
@@ -57,9 +64,11 @@ class NotificationListDto {
     final rawItems = json['items'];
     final items = rawItems is List
         ? rawItems
-            .whereType<Map>()
-            .map((e) => NotificationDto.fromJson(Map<String, dynamic>.from(e)))
-            .toList(growable: false)
+              .whereType<Map>()
+              .map(
+                (e) => NotificationDto.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList(growable: false)
         : const <NotificationDto>[];
 
     return NotificationListDto(

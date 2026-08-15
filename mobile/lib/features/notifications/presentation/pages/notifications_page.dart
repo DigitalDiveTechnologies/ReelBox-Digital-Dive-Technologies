@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/route_paths.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_gradients.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -19,7 +23,16 @@ class NotificationsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final horizontal = AppBackButton.horizontalInset(context);
-    final asyncItems = ref.watch(notificationsListProvider);
+    final asyncItems = ref.watch(filteredNotificationsProvider);
+
+    ref.listen<AsyncValue<List<NotificationItem>>>(
+      filteredNotificationsProvider,
+      (previous, next) {
+        final items = next.asData?.value;
+        if (items == null || items.isEmpty) return;
+        unawaited(markAllNotificationsAsRead(ref));
+      },
+    );
 
     return Scaffold(
       backgroundColor: AppColors.splashBgDeep,
@@ -141,7 +154,53 @@ class NotificationsPage extends ConsumerWidget {
                           separatorBuilder: (_, _) =>
                               const SizedBox(height: AppSpacing.sm),
                           itemBuilder: (context, index) {
-                            return _NotificationTile(item: items[index]);
+                            final item = items[index];
+                            return Dismissible(
+                              key: ValueKey(item.id),
+                              direction: DismissDirection.endToStart,
+                              background: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Color.alphaBlend(
+                                    AppColors.statusFailed.withValues(
+                                      alpha: 0.82,
+                                    ),
+                                    AppColors.splashBgDeep,
+                                  ),
+                                  borderRadius: AppRadius.circularCard,
+                                ),
+                                child: const Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.md,
+                                    ),
+                                    child: Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: AppColors.splashTextPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              onDismissed: (_) async {
+                                await deleteNotification(ref, item.id);
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Notification removed'),
+                                  ),
+                                );
+                              },
+                              child: GestureDetector(
+                                onTap: () {
+                                  final mediaId = item.mediaId?.trim() ?? '';
+                                  if (mediaId.isEmpty) return;
+                                  context.push(
+                                    RoutePaths.mediaDetailPath(mediaId),
+                                  );
+                                },
+                                child: _NotificationTile(item: item),
+                              ),
+                            );
                           },
                         ),
                       );

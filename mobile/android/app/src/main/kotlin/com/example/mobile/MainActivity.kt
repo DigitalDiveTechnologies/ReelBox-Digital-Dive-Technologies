@@ -33,6 +33,7 @@ class MainActivity : FlutterActivity() {
         private const val METHOD_GET_CACHE_DIR = "getCacheDir"
         private const val METHOD_SAVE_VIDEO_TO_GALLERY = "saveVideoToGallery"
         private const val METHOD_SHARE_GALLERY_BY_MEDIA_ID = "shareGalleryVideoByMediaId"
+        private const val METHOD_FIND_GALLERY_VIDEO_URI = "findGalleryVideoUri"
 
         /** Survives activity recreation until Flutter consumes the payload. */
         @Volatile
@@ -115,6 +116,24 @@ class MainActivity : FlutterActivity() {
                             Log.w(TAG, "shareGalleryVideoByMediaId failed: ${ex.message}")
                             result.error("gallery_share_failed", ex.message, null)
                         }
+                    }
+                    METHOD_FIND_GALLERY_VIDEO_URI -> {
+                        @Suppress("UNCHECKED_CAST")
+                        val args = call.arguments as? Map<String, Any?>
+                        val mediaIdToken = args?.get("mediaIdToken") as? String
+                        if (mediaIdToken.isNullOrBlank()) {
+                            result.success(null)
+                            return@setMethodCallHandler
+                        }
+                        Thread {
+                            val found = try {
+                                findReelBoxGalleryVideo(mediaIdToken.trim())
+                            } catch (ex: Exception) {
+                                Log.w(TAG, "findGalleryVideoUri failed: ${ex.message}")
+                                null
+                            }
+                            runOnUiThread { result.success(found?.first?.toString()) }
+                        }.start()
                     }
                     METHOD_SAVE_VIDEO_TO_GALLERY -> {
                         @Suppress("UNCHECKED_CAST")
@@ -261,13 +280,10 @@ class MainActivity : FlutterActivity() {
         if (token.isEmpty()) return null
 
         val isQ = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-        val collection = if (isQ) {
-            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        } else {
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        }
+        // Same collection Task 1's galleryEntryExists uses. PRIMARY-only misses
+        // OEM volumes even when the Gallery app can already show the file.
+        val collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
 
-        // Include RELATIVE_PATH and IS_PENDING on Q+ for logging and safety checks.
         val projection = if (isQ) arrayOf(
             MediaStore.Video.Media._ID,           // 0
             MediaStore.Video.Media.MIME_TYPE,      // 1
@@ -280,30 +296,13 @@ class MainActivity : FlutterActivity() {
             MediaStore.Video.Media.DISPLAY_NAME,
         )
 
-        // Matches Task 1 names: ReelBox_<token>.mp4 and ReelBox_<token>_<title>.mp4
-        // Scoped to Movies/ReelBox on Q+. IS_PENDING=0 is explicit to prevent
-        // sharing an in-progress (incomplete) MediaStore entry.
-        val nameClause =
-            "(${MediaStore.Video.Media.DISPLAY_NAME} LIKE ? OR ${MediaStore.Video.Media.DISPLAY_NAME} LIKE ?)"
-        val selection: String
-        val args: Array<String>
-        if (isQ) {
-            selection =
-                "$nameClause AND ${MediaStore.Video.Media.RELATIVE_PATH} LIKE ?" +
-                " AND ${MediaStore.Video.Media.IS_PENDING}=0"
-            args = arrayOf("ReelBox_$token.%", "ReelBox_${token}_%", "%Movies/ReelBox%")
-        } else {
-            selection = nameClause
-            args = arrayOf("ReelBox_$token.%", "ReelBox_${token}_%")
-        }
+        // Prefix match only. Do not AND RELATIVE_PATH / IS_PENDING=0 in SQL:
+        // those extra filters are stricter than Task 1's write path and hide
+        // committed rows (NULL IS_PENDING, trailing-slash path variants).
+        val selection = "${MediaStore.Video.Media.DISPLAY_NAME} LIKE ?"
+        val args = arrayOf("ReelBox_$token%")
 
-        Log.d(
-            TAG,
-            "SHARE_GALLERY: query token=$token" +
-            " pat1=ReelBox_$token.%" +
-            " pat2=ReelBox_${token}_%" +
-            " collection=$collection",
-        )
+        Log.d(TAG, "SHARE_GALLERY: query token=$token collection=$collection")
 
         contentResolver.query(
             collection,
@@ -312,23 +311,65 @@ class MainActivity : FlutterActivity() {
             args,
             "${MediaStore.Video.Media.DATE_ADDED} DESC",
         ).use { cursor ->
-            if (cursor == null || !cursor.moveToFirst()) {
-                Log.i(TAG, "SHARE_GALLERY: no committed row for token=$token")
+            if (cursor == null) {
+                Log.i(TAG, "SHARE_GALLERY: null cursor for token=$token")
                 return null
             }
-            val id = cursor.getLong(0)
-            val mime = cursor.getString(1)
-            val displayName = cursor.getString(2)
-            val relativePath = if (isQ) cursor.getString(3) else "n/a"
-            val isPending = if (isQ) cursor.getInt(4) else 0
-            val uri = ContentUris.withAppendedId(collection, id)
-            Log.i(
-                TAG,
-                "SHARE_GALLERY: found id=$id displayName=$displayName" +
-                " relativePath=$relativePath IS_PENDING=$isPending uri=$uri",
-            )
-            return uri to mime
+
+            var fallback: Pair<Uri, String?>? = null
+            while (cursor.moveToNext()) {
+                val displayName = cursor.getString(2) ?: continue
+                if (!displayNameMatchesGalleryToken(displayName, token)) continue
+
+                val isPending = if (isQ) cursor.getInt(4) else 0
+                if (isPending == 1) {
+                    Log.d(TAG, "SHARE_GALLERY: skip pending displayName=$displayName")
+                    continue
+                }
+
+                val id = cursor.getLong(0)
+                val mime = cursor.getString(1)
+                val relativePath = if (isQ) cursor.getString(3) else "n/a"
+                // Task 1 inserts into VOLUME_EXTERNAL_PRIMARY. Playback via the
+                // generic `external` collection URI fails on some OEMs even when
+                // the MediaStore row is visible — VideoPlayer then falls back to VPS.
+                val playCollection = if (isQ) {
+                    MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                } else {
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                }
+                val uri = ContentUris.withAppendedId(playCollection, id)
+                val candidate = uri to mime
+                Log.i(
+                    TAG,
+                    "SHARE_GALLERY: found id=$id displayName=$displayName" +
+                    " relativePath=$relativePath IS_PENDING=$isPending uri=$uri",
+                )
+                if (!isQ || relativePath.isNullOrBlank() ||
+                    relativePath.contains("Movies/ReelBox")
+                ) {
+                    return candidate
+                }
+                if (fallback == null) fallback = candidate
+            }
+
+            if (fallback != null) {
+                Log.i(TAG, "SHARE_GALLERY: using DISPLAY_NAME match outside Movies/ReelBox token=$token")
+                return fallback
+            }
+            Log.i(TAG, "SHARE_GALLERY: no committed row for token=$token")
+            return null
         }
+    }
+
+    /**
+     * Task 1 names: `ReelBox_<token>.mp4` and `ReelBox_<token>_<title>.mp4`.
+     * Kotlin startsWith — SQL LIKE `_` is a single-char wildcard and must not
+     * be the only matcher.
+     */
+    private fun displayNameMatchesGalleryToken(displayName: String, token: String): Boolean {
+        return displayName.startsWith("ReelBox_${token}.") ||
+            displayName.startsWith("ReelBox_${token}_")
     }
 
     private fun shareContentUri(uri: Uri, mimeType: String, text: String?) {
