@@ -113,12 +113,67 @@ class MediaShareService {
 
     for (final ext in candidates) {
       final file = File(p.join(cacheDir, shareCacheFileName(mediaId, ext)));
-      if (await file.exists()) {
-        final length = await file.length();
-        if (length > 0) return file;
-      }
+      if (await _isValidCacheFile(file)) return file;
     }
     return null;
+  }
+
+  static Future<bool> _isValidCacheFile(File file) async {
+    final name = p.basename(file.path).toLowerCase();
+    if (name.endsWith('.tmp')) return false;
+    if (!await file.exists()) return false;
+    final length = await file.length();
+    if (length <= 0) {
+      try {
+        await file.delete();
+      } catch (_) {}
+      return false;
+    }
+    return true;
+  }
+
+  /// In-flight VPS → share-cache writes, shared by Player and Share.
+  static final Map<String, Future<File>> _inflightCacheWrites =
+      <String, Future<File>>{};
+
+  /// Downloads signed VPS content into `srs-share-$id.*` if missing.
+  ///
+  /// Reuses an in-flight write for the same [mediaId]. Does not overwrite a
+  /// valid cache file.
+  Future<File> cacheSignedPlayback({
+    required String mediaId,
+    required String rawPlaybackUrl,
+    required String mimeType,
+  }) {
+    final id = mediaId.trim();
+    return _inflightCacheWrites.putIfAbsent(id, () async {
+      try {
+        final existing = await findExistingShareCache(
+          mediaId: id,
+          preferredMime: mimeType,
+        );
+        if (existing != null) return existing;
+
+        final cacheDir = await _cacheDirPath();
+        if (cacheDir == null || cacheDir.isEmpty) {
+          throw const ShareDownloadException(
+            'Could not access app cache for sharing.',
+          );
+        }
+
+        final mime = mimeType.split(';').first.trim();
+        final dest = File(
+          p.join(cacheDir, shareCacheFileName(id, extensionForMime(mime))),
+        );
+        await _streamToFile(
+          uri: resolveSignedMediaUrl(rawPlaybackUrl),
+          destination: dest,
+        );
+        return dest;
+      } finally {
+        _inflightCacheWrites.remove(id);
+      }
+    });
   }
 
   /// Shares a completed reel, preferring local sources over network download.
@@ -188,22 +243,14 @@ class MediaShareService {
     }
 
     final mime = (playback.mimeType ?? fallbackMime).split(';').first.trim();
-    final extension = extensionForMime(mime);
-    final cacheDir = await _cacheDirPath();
-    if (cacheDir == null || cacheDir.isEmpty) {
-      throw const ShareDownloadException(
-        'Could not access app cache for sharing.',
-      );
-    }
-
-    final filePath = p.join(cacheDir, shareCacheFileName(mediaId, extension));
-    await _streamToFile(
-      uri: resolveSignedMediaUrl(rawUrl),
-      destination: File(filePath),
+    final cachedFile = await cacheSignedPlayback(
+      mediaId: mediaId,
+      rawPlaybackUrl: rawUrl,
+      mimeType: mime.isEmpty ? 'video/mp4' : mime,
     );
 
     await _invokeShareFile(
-      path: filePath,
+      path: cachedFile.path,
       mimeType: mime.isEmpty ? 'video/mp4' : mime,
       text: displayTitle,
     );
@@ -291,14 +338,24 @@ class MediaShareService {
     }
   }
 
-  /// Streams HTTP response to [destination] without loading all bytes in RAM.
+  /// Streams HTTP response to [destination] via `srs-share-$id.tmp`, then rename.
   Future<void> _streamToFile({
     required Uri uri,
     required File destination,
   }) async {
-    if (await destination.exists()) {
-      await destination.delete();
-    }
+    if (await _isValidCacheFile(destination)) return;
+
+    final tmp = File(
+      p.join(
+        p.dirname(destination.path),
+        '${p.basenameWithoutExtension(destination.path)}.tmp',
+      ),
+    );
+    try {
+      if (await tmp.exists()) {
+        await tmp.delete();
+      }
+    } catch (_) {}
 
     final request = http.Request('GET', uri);
     final response = await _http.send(request);
@@ -308,28 +365,37 @@ class MediaShareService {
       );
     }
 
-    final sink = destination.openWrite();
+    final sink = tmp.openWrite();
     try {
       await response.stream.pipe(sink);
       await sink.flush();
-    } catch (error) {
       await sink.close();
+    } catch (error) {
       try {
-        if (await destination.exists()) {
-          await destination.delete();
+        await sink.close();
+      } catch (_) {}
+      try {
+        if (await tmp.exists()) {
+          await tmp.delete();
         }
       } catch (_) {}
       rethrow;
     }
-    await sink.close();
 
-    final length = await destination.length();
+    final length = await tmp.length();
     if (length <= 0) {
       try {
-        await destination.delete();
+        await tmp.delete();
       } catch (_) {}
       throw const ShareDownloadException('Downloaded file is empty.');
     }
+
+    try {
+      if (await destination.exists()) {
+        await destination.delete();
+      }
+    } catch (_) {}
+    await tmp.rename(destination.path);
   }
 
   String _mimeForPath(String path, String fallbackMime) {

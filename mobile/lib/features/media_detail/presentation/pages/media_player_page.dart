@@ -4,12 +4,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:video_player/video_player.dart';
 
 import '../../../../core/errors/app_exception.dart';
-import '../../../../core/network/media_url_resolver.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_gradients.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -233,6 +231,7 @@ class _LocalPlaybackSession {
             return opened;
           }
           if (opened != null) {
+            await _discardUnusableShareCache(opened);
             await opened.dispose();
           }
           return null;
@@ -266,15 +265,28 @@ class _LocalPlaybackSession {
 Future<VideoPlayerController?> _openLocalPlayableController(
   String mediaId,
 ) async {
-  const channel = MethodChannel('com.example.mobile/share_intent');
   final id = mediaId.trim();
   if (id.isEmpty) return null;
+  const channel = MethodChannel('com.example.mobile/share_intent');
+
+  try {
+    final cached = await MediaShareService().findExistingShareCache(mediaId: id);
+    if (cached != null) {
+      return VideoPlayerController.file(
+        cached,
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
+      );
+    }
+  } catch (error) {
+    debugPrint('LOCAL_PLAYBACK cache: $error');
+  }
 
   try {
     final cacheDir = await channel.invokeMethod<String>('getCacheDir');
     if (cacheDir != null && cacheDir.isNotEmpty) {
-      final fromCache = await _controllerFromCacheDir(cacheDir, id);
-      if (fromCache != null) return fromCache;
+      final fromGalleryTemp =
+          await _controllerFromGalleryTempCache(cacheDir, id);
+      if (fromGalleryTemp != null) return fromGalleryTemp;
     }
   } catch (error) {
     debugPrint('LOCAL_PLAYBACK cache: $error');
@@ -307,16 +319,12 @@ Future<VideoPlayerController?> _openLocalPlayableController(
   return null;
 }
 
-Future<VideoPlayerController?> _controllerFromCacheDir(
+Future<VideoPlayerController?> _controllerFromGalleryTempCache(
   String cacheDir,
   String id,
 ) async {
   final safeId = id.replaceAll(RegExp(r'[^\w\-]+'), '_');
   final names = <String>{
-    MediaShareService.shareCacheFileName(id, '.mp4'),
-    MediaShareService.shareCacheFileName(id, '.mov'),
-    MediaShareService.shareCacheFileName(safeId, '.mp4'),
-    MediaShareService.shareCacheFileName(safeId, '.mov'),
     'srs-gallery-$safeId.mp4',
     'srs-gallery-$safeId.mov',
     'srs-gallery-$id.mp4',
@@ -331,31 +339,26 @@ Future<VideoPlayerController?> _controllerFromCacheDir(
       );
     }
   }
-
-  final prefixes = <String>{
-    'srs-share-$safeId',
-    'srs-share-$id',
-    'srs-gallery-$safeId',
-    'srs-gallery-$id',
-  };
-  try {
-    final dir = Directory(cacheDir);
-    if (!await dir.exists()) return null;
-    await for (final entity in dir.list(followLinks: false)) {
-      if (entity is! File) continue;
-      final name = p.basename(entity.path);
-      if (!prefixes.any((prefix) => name.startsWith(prefix))) continue;
-      if (await entity.length() > 0) {
-        return VideoPlayerController.file(
-          entity,
-          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
-        );
-      }
-    }
-  } catch (error) {
-    debugPrint('LOCAL_PLAYBACK cache scan: $error');
-  }
   return null;
+}
+
+Future<void> _discardUnusableShareCache(
+  VideoPlayerController controller,
+) async {
+  final source = controller.dataSource;
+  if (!source.contains('srs-share-') || source.toLowerCase().endsWith('.tmp')) {
+    return;
+  }
+  try {
+    var path = source;
+    if (path.startsWith('file:')) {
+      path = Uri.parse(path).toFilePath();
+    }
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  } catch (_) {}
 }
 
 Future<VideoPlayerController?> _controllerFromGalleryLookup(
@@ -580,24 +583,16 @@ class _PagedReelPlayerState extends ConsumerState<_PagedReelPlayer>
         throw const AppException(message: 'Playback URL unavailable.');
       }
 
-      final uri = resolveSignedMediaUrl(rawUrl);
-
-      try {
-        final probe = await http.head(uri);
-        if (probe.statusCode == 401 ||
-            probe.statusCode == 403 ||
-            probe.statusCode == 404) {
-          throw AppException(
-            message: 'Video unavailable (${probe.statusCode}).',
-          );
-        }
-      } catch (error) {
-        if (error is AppException) rethrow;
-      }
+      final mime = (playback.mimeType ?? 'video/mp4').split(';').first.trim();
+      final cachedFile = await MediaShareService().cacheSignedPlayback(
+        mediaId: item.id,
+        rawPlaybackUrl: rawUrl,
+        mimeType: mime.isEmpty ? 'video/mp4' : mime,
+      );
 
       final attached = await _attachNetworkController(
-        VideoPlayerController.networkUrl(
-          uri,
+        VideoPlayerController.file(
+          cachedFile,
           videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
         ),
       );

@@ -225,6 +225,12 @@ void main() {
     final file = File(sharedPath);
     expect(await file.exists(), isTrue);
     expect(await file.length(), payload.length);
+    expect(
+      await File(
+        p.join(tempDir.path, 'srs-share-m2.tmp'),
+      ).exists(),
+      isFalse,
+    );
   });
 
   test('second share reuses the file created by the first share', () async {
@@ -316,6 +322,41 @@ void main() {
     expect(
       MediaShareService.galleryMediaIdToken('abc-123'),
       startsWith('abc'),
+    );
+  });
+
+  test('ignores partial .tmp cache and does not treat it as a hit', () async {
+    await File(
+      p.join(tempDir.path, 'srs-share-m1.tmp'),
+    ).writeAsBytes(utf8.encode('partial-not-valid'));
+
+    final payload = utf8.encode('final-video');
+    final service = buildService(
+      client: MockClient((request) async {
+        return http.Response.bytes(payload, 200);
+      }),
+    );
+
+    await service.shareCompletedMedia(
+      mediaId: 'm1',
+      displayTitle: 'Tmp',
+      fallbackMime: 'video/mp4',
+      resolvePlayback: () async => playback(
+        url: 'http://cdn.example.com/v.mp4',
+      ),
+    );
+
+    expect(playbackResolves, 1);
+    expect(shareCalls, hasLength(1));
+    expect(
+      await File(
+        p.join(tempDir.path, MediaShareService.shareCacheFileName('m1', '.mp4')),
+      ).length(),
+      payload.length,
+    );
+    expect(
+      await File(p.join(tempDir.path, 'srs-share-m1.tmp')).exists(),
+      isFalse,
     );
   });
 }
