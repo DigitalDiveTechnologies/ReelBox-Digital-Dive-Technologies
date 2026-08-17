@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/auth_user.dart';
@@ -11,6 +12,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   @override
   Future<AuthState> build() async {
     final user = await _repository.getCurrentUser();
+    debugPrint(
+      '[AUTH_DEBUG] notifier: restoredSession=${user != null}',
+    );
     return AuthState(user: user);
   }
 
@@ -53,6 +57,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    debugPrint('[AUTH_DEBUG] notifier: explicitLogout=true');
     state = const AsyncLoading();
     try {
       await _repository.logout();

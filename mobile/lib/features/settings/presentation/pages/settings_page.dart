@@ -54,6 +54,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
     if (confirmed != true || !mounted) return;
 
+    debugPrint('[AUTH_DEBUG] settings: explicitLogoutConfirmed=true');
     setState(() => _loggingOut = true);
     try {
       await ref.read(authNotifierProvider.notifier).logout();

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Local auth data source (JWT access + refresh tokens + cached user profile).
@@ -81,6 +82,9 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<void> clearSession() async {
+    debugPrint(
+      '[AUTH_DEBUG] clearSession: wiping stored tokens and cached user',
+    );
     final prefs = await _prefs();
     await prefs.remove(_accessKey);
     await prefs.remove(_refreshKey);

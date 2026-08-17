@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
@@ -158,8 +159,26 @@ class HttpApiClient implements ApiClient {
       );
     }
 
+    if (response.statusCode == 403) {
+      debugPrint('[AUTH_DEBUG] http: status=403 sessionNotCleared=true');
+    }
+
+    if (response.statusCode == 401 && !authenticated) {
+      debugPrint(
+        '[AUTH_DEBUG] http: status=401 authenticated=false sessionNotClearedByHttpClient=true',
+      );
+    }
+
+    if (response.statusCode == 401 && authenticated && didRefresh) {
+      debugPrint(
+        '[AUTH_DEBUG] http: status=401 afterRefreshRetry throwingMappedError=true',
+      );
+    }
+
     if (response.statusCode == 401 && authenticated && !didRefresh) {
+      debugPrint('[AUTH_DEBUG] http: status=401 attemptingRefresh=true');
       final refreshed = await _tryRefresh();
+      debugPrint('[AUTH_DEBUG] http: refreshAfter401=$refreshed');
       if (refreshed) {
         return _send(
           method: method,
@@ -192,7 +211,11 @@ class HttpApiClient implements ApiClient {
 
   Future<bool> _tryRefresh() async {
     final refresh = await _readRefreshToken();
+    debugPrint(
+      '[AUTH_DEBUG] refresh: refreshTokenPresent=${refresh != null && refresh.isNotEmpty}',
+    );
     if (refresh == null || refresh.isEmpty) {
+      debugPrint('[AUTH_DEBUG] refresh: reason=missingRefreshToken');
       await _clearSession();
       return false;
     }
@@ -209,20 +232,24 @@ class HttpApiClient implements ApiClient {
         headers: headers,
         body: jsonEncode({'refreshToken': refresh}),
       );
+      debugPrint('[AUTH_DEBUG] refresh: httpStatus=${response.statusCode}');
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint('[AUTH_DEBUG] refresh: reason=httpFailure');
         await _clearSession();
         return false;
       }
 
       final decoded = jsonDecode(response.body);
       if (decoded is! Map<String, dynamic>) {
+        debugPrint('[AUTH_DEBUG] refresh: reason=invalidJsonBody');
         await _clearSession();
         return false;
       }
 
       final tokens = decoded['tokens'];
       if (tokens is! Map<String, dynamic>) {
+        debugPrint('[AUTH_DEBUG] refresh: reason=missingTokensObject');
         await _clearSession();
         return false;
       }
@@ -233,13 +260,18 @@ class HttpApiClient implements ApiClient {
           access.isEmpty ||
           nextRefresh == null ||
           nextRefresh.isEmpty) {
+        debugPrint('[AUTH_DEBUG] refresh: reason=missingTokenFields');
         await _clearSession();
         return false;
       }
 
       await _saveTokens(accessToken: access, refreshToken: nextRefresh);
+      debugPrint('[AUTH_DEBUG] refresh: success=true');
       return true;
-    } catch (_) {
+    } catch (error) {
+      debugPrint(
+        '[AUTH_DEBUG] refresh: reason=exception type=${error.runtimeType}',
+      );
       await _clearSession();
       return false;
     }

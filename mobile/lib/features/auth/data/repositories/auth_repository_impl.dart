@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../domain/entities/auth_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_local_datasource.dart';
@@ -16,7 +18,17 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<AuthUser?> getCurrentUser() async {
     final token = await localDataSource.getAccessToken();
+    final refresh = await localDataSource.getRefreshToken();
+    debugPrint(
+      '[AUTH_DEBUG] getCurrentUser: accessTokenPresent=${token != null && token.isNotEmpty}',
+    );
+    debugPrint(
+      '[AUTH_DEBUG] getCurrentUser: refreshTokenPresent=${refresh != null && refresh.isNotEmpty}',
+    );
     if (token == null || token.isEmpty) {
+      debugPrint(
+        '[AUTH_DEBUG] getCurrentUser: restored=false reason=missingAccessToken',
+      );
       return null;
     }
 
@@ -25,19 +37,32 @@ class AuthRepositoryImpl implements AuthRepository {
       final user = model?.toDomain();
       if (user != null) {
         await localDataSource.saveCachedUser(id: user.id, email: user.email);
+        debugPrint('[AUTH_DEBUG] getCurrentUser: restored=true source=remote');
         return user;
       }
-    } catch (_) {
+    } catch (error) {
+      debugPrint(
+        '[AUTH_DEBUG] getCurrentUser: remoteFailed type=${error.runtimeType}',
+      );
       final refreshed = await _refreshIfPossible();
+      debugPrint(
+        '[AUTH_DEBUG] getCurrentUser: refreshIfPossible=$refreshed',
+      );
       if (refreshed) {
         try {
           final model = await remoteDataSource.getCurrentUser();
           final user = model?.toDomain();
           if (user != null) {
             await localDataSource.saveCachedUser(id: user.id, email: user.email);
+            debugPrint(
+              '[AUTH_DEBUG] getCurrentUser: restored=true source=remoteAfterRefresh',
+            );
             return user;
           }
-        } catch (_) {
+        } catch (retryError) {
+          debugPrint(
+            '[AUTH_DEBUG] getCurrentUser: retryFailed type=${retryError.runtimeType}',
+          );
           // Fall through to local cache.
         }
       }
@@ -45,9 +70,11 @@ class AuthRepositoryImpl implements AuthRepository {
 
     final cached = await localDataSource.getCachedUser();
     if (cached != null) {
+      debugPrint('[AUTH_DEBUG] getCurrentUser: restored=true source=localCache');
       return AuthUser(id: cached.id, email: cached.email);
     }
 
+    debugPrint('[AUTH_DEBUG] getCurrentUser: restored=false reason=noUser');
     return null;
   }
 
@@ -105,6 +132,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> logout() async {
+    debugPrint('[AUTH_DEBUG] logout: explicit=true');
     try {
       await remoteDataSource.logout();
     } catch (_) {
@@ -116,9 +144,12 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<bool> isAuthenticated() async {
     final access = await localDataSource.getAccessToken();
-    if (access != null && access.isNotEmpty) {
+    final accessPresent = access != null && access.isNotEmpty;
+    debugPrint('[AUTH_DEBUG] isAuthenticated: accessTokenPresent=$accessPresent');
+    if (accessPresent) {
       return true;
     }
+    debugPrint('[AUTH_DEBUG] isAuthenticated: fallingBackToRefresh=true');
     return _refreshIfPossible();
   }
 
@@ -142,7 +173,13 @@ class AuthRepositoryImpl implements AuthRepository {
 
   Future<bool> _refreshIfPossible() async {
     final refresh = await localDataSource.getRefreshToken();
+    debugPrint(
+      '[AUTH_DEBUG] refreshIfPossible: refreshTokenPresent=${refresh != null && refresh.isNotEmpty}',
+    );
     if (refresh == null || refresh.isEmpty) {
+      debugPrint(
+        '[AUTH_DEBUG] refreshIfPossible: reason=missingRefreshToken',
+      );
       await localDataSource.clearSession();
       return false;
     }
@@ -155,8 +192,12 @@ class AuthRepositoryImpl implements AuthRepository {
       );
       final user = session.user.toDomain();
       await localDataSource.saveCachedUser(id: user.id, email: user.email);
+      debugPrint('[AUTH_DEBUG] refreshIfPossible: success=true');
       return true;
-    } catch (_) {
+    } catch (error) {
+      debugPrint(
+        '[AUTH_DEBUG] refreshIfPossible: reason=exception type=${error.runtimeType}',
+      );
       await localDataSource.clearSession();
       return false;
     }

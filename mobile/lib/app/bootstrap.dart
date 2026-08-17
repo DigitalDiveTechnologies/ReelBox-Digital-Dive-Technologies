@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/router/route_paths.dart';
@@ -16,11 +17,26 @@ Future<BootstrapResult> bootstrap() async {
     final prefs = await SharedPreferences.getInstance();
     final local = AuthLocalDataSourceImpl(preferences: prefs);
     final access = await local.getAccessToken();
+    final refresh = await local.getRefreshToken();
+    final accessPresent = access != null && access.trim().isNotEmpty;
+    final refreshPresent = refresh != null && refresh.trim().isNotEmpty;
+    debugPrint('[AUTH_DEBUG] startup: accessTokenPresent=$accessPresent');
+    debugPrint('[AUTH_DEBUG] startup: refreshTokenPresent=$refreshPresent');
     final signedIn = access != null && access.trim().isNotEmpty;
+    debugPrint('[AUTH_DEBUG] startup: restoredSession=$signedIn');
+    if (!signedIn) {
+      debugPrint(
+        '[AUTH_DEBUG] startup: entering Splash because session missing',
+      );
+    }
     return BootstrapResult(
       initialLocation: signedIn ? RoutePaths.home : RoutePaths.splash,
     );
-  } catch (_) {
+  } catch (error) {
+    debugPrint('[AUTH_DEBUG] startup: bootstrap exception type=${error.runtimeType}');
+    debugPrint(
+      '[AUTH_DEBUG] startup: entering Splash because session missing',
+    );
     return const BootstrapResult(initialLocation: RoutePaths.splash);
   }
 }
